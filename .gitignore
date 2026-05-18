@@ -1,6 +1,2 @@
-.DS_Store
-node_modules
-.nyc_output
-coverage
-tmp
-.idea
+/node_modules
+/lib

@@ -1,23 +1,61 @@
-const Exclude = require('test-exclude')
-const libCoverage = require('istanbul-lib-coverage')
-const libReport = require('istanbul-lib-report')
-const reports = require('istanbul-reports')
-let readFile
-try {
-  ;({ readFile } = require('fs/promises'))
-} catch (err) {
-  ;({ readFile } = require('fs').promises)
-}
-const { readdirSync, readFileSync, statSync } = require('fs')
-const { isAbsolute, resolve, extname } = require('path')
-const { pathToFileURL, fileURLToPath } = require('url')
-const getSourceMapFromFile = require('./source-map-from-file')
+import Exclude from 'test-exclude'
+import libCoverage from 'istanbul-lib-coverage'
+import libReport from 'istanbul-lib-report'
+import reports from 'istanbul-reports'
+import {readFile} from 'node:fs/promises';
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { isAbsolute, resolve, extname } from 'node:path'
+import { pathToFileURL, fileURLToPath } from 'node:url'
+import {getSourceMapFromFile} from './source-map-from-file.js'
 // TODO: switch back to @c88/v8-coverage once patch is landed.
-const v8toIstanbul = require('v8-to-istanbul')
-const util = require('util')
-const debuglog = util.debuglog('c8')
+import v8toIstanbul from 'v8-to-istanbul'
+import util from 'node:util'
+import { ReportDescription, V8CoverageEntry, type CoverageReportOptions } from 'monocart-coverage-reports';
 
-class Report {
+const debuglog = util.debuglog('c8')
+const DEFAULT_MAX_COLS = 100
+
+export interface ReportOptions {
+  exclude: string[]
+  extension: string | string[]
+  excludeAfterRemap: boolean
+  include: string[]
+  reporter: string[]
+  reporterOptions?: Record<string, Record<string, unknown>>
+  reportsDirectory: string
+  tempDirectory: string
+  watermarks: Record<string, [number, number]>
+  omitRelative: boolean
+  wrapperLength: number
+  resolve: string
+  all: boolean
+  src?: string | string[]
+  allowExternal?: boolean
+  skipFull: boolean
+  excludeNodeModules: boolean
+  mergeAsync: boolean
+  monocartArgv?: CoverageReportOptions
+}
+
+export class Report {
+  #reporter: string[]
+  #reporterOptions: Record<string, Record<string, unknown>>
+  #reportsDirectory: string
+  #tempDirectory: string
+  #watermarks: Record<string, [number, number]>
+  #resolve: string
+  #exclude: Exclude
+  #excludeAfterRemap: boolean
+  #shouldInstrumentCache: Map<string, boolean>
+  #omitRelative: boolean
+  #sourceMapCache: Record<string, any>
+  #wrapperLength: number
+  #all: boolean
+  #src: string[]
+  #skipFull: boolean
+  #mergeAsync: boolean
+  #monocartArgv: CoverageReportOptions | undefined
+
   constructor ({
     exclude,
     extension,
@@ -38,58 +76,55 @@ class Report {
     excludeNodeModules,
     mergeAsync,
     monocartArgv
-  }) {
-    this.reporter = reporter
-    this.reporterOptions = reporterOptions || {}
-    this.reportsDirectory = reportsDirectory
-    this.tempDirectory = tempDirectory
-    this.watermarks = watermarks
-    this.resolve = resolvePaths
-    this.exclude = new Exclude({
+  }: ReportOptions) {
+    this.#reporter = reporter
+    this.#reporterOptions = reporterOptions || {}
+    this.#reportsDirectory = reportsDirectory
+    this.#tempDirectory = tempDirectory
+    this.#watermarks = watermarks
+    this.#resolve = resolvePaths
+    this.#exclude = new Exclude({
       exclude: exclude,
       include: include,
       extension: extension,
       relativePath: !allowExternal,
       excludeNodeModules: excludeNodeModules
     })
-    this.excludeAfterRemap = excludeAfterRemap
-    this.shouldInstrumentCache = new Map()
-    this.omitRelative = omitRelative
-    this.sourceMapCache = {}
-    this.wrapperLength = wrapperLength
-    this.all = all
-    this.src = this._getSrc(src)
-    this.skipFull = skipFull
-    this.mergeAsync = mergeAsync
-    this.monocartArgv = monocartArgv
-  }
+    this.#excludeAfterRemap = excludeAfterRemap
+    this.#shouldInstrumentCache = new Map()
+    this.#omitRelative = omitRelative
+    this.#sourceMapCache = {}
+    this.#wrapperLength = wrapperLength
+    this.#all = all
+    this.#skipFull = skipFull
+    this.#mergeAsync = mergeAsync
+    this.#monocartArgv = monocartArgv
 
-  _getSrc (src) {
     if (typeof src === 'string') {
-      return [src]
+      this.#src = [src]
     } else if (Array.isArray(src)) {
-      return src
+      this.#src = src
     } else {
-      return [process.cwd()]
+      this.#src = [process.cwd()]
     }
   }
 
   async run () {
-    if (this.monocartArgv) {
+    if (this.#monocartArgv) {
       return this.runMonocart()
     }
     const context = libReport.createContext({
-      dir: this.reportsDirectory,
-      watermarks: this.watermarks,
+      dir: this.#reportsDirectory,
+      watermarks: this.#watermarks,
       coverageMap: await this.getCoverageMapFromAllCoverageFiles()
     })
 
-    for (const _reporter of this.reporter) {
+    for (const _reporter of this.#reporter) {
       reports.create(_reporter, {
         skipEmpty: false,
-        skipFull: this.skipFull,
-        maxCols: process.stdout.columns || 100,
-        ...this.reporterOptions[_reporter]
+        skipFull: this.#skipFull,
+        maxCols: process.stdout.columns || DEFAULT_MAX_COLS,
+        ...this.#reporterOptions[_reporter]
       }).execute(context)
     }
   }
@@ -109,63 +144,83 @@ class Report {
     return MCR
   }
 
+  #defaultMonocartEntryFilter = (entry: V8CoverageEntry) => {
+    return this.#exclude.shouldInstrument(fileURLToPath(entry.url))
+  };
+
+  #defaultMonocartSourceFilter = (sourcePath: string) => {
+    if (this.#monocartArgv?.excludeAfterRemap) {
+      // console.log(sourcePath)
+      return this.#exclude.shouldInstrument(sourcePath)
+    }
+    return true
+  };
+
+  #computeMonocartEntryFilter() {
+    const argv = this.#monocartArgv
+    if (!argv) {
+      return this.#defaultMonocartEntryFilter;
+    }
+    return argv.entryFilter || argv.filter || this.#defaultMonocartEntryFilter;
+  }
+
+  #computeMonocartSourceFilter() {
+    const argv = this.#monocartArgv
+
+    if (!argv) {
+      return this.#defaultMonocartSourceFilter;
+    }
+    return argv.sourceFilter || argv.filter || this.#defaultMonocartSourceFilter;
+  }
+
+  #getMonocartReports(): ReportDescription[] {
+    const argv = this.#monocartArgv;
+
+    if (!argv) {
+      return [];
+    }
+
+    const reports: unknown[] = Array.isArray(argv.reporter) ? argv.reporter : [argv.reporter]
+    const reporterOptions: Record<PropertyKey, unknown> = argv.reporterOptions || {}
+
+    return reports.map((reportName) => {
+      const reportOptions = {
+        ...reporterOptions[reportName]
+      }
+      if (reportName === 'text') {
+        reportOptions.skipEmpty = false
+        reportOptions.skipFull = argv.skipFull
+        reportOptions.maxCols = process.stdout.columns || DEFAULT_MAX_COLS
+      }
+      return [reportName, reportOptions]
+    })
+  }
+
+  // --all: add empty coverage for all files
+  #getMonocartAllOptions() {
+    const argv = this.#monocartArgv;
+
+    if (!argv?.all) {
+      return undefined;
+    }
+
+    const src = argv.src
+    const workingDirs: string[] = Array.isArray(src) ? src : (typeof src === 'string' ? [src] : [process.cwd()])
+    return {
+      dir: workingDirs,
+      filter: (filePath: string) => {
+        return this.#exclude.shouldInstrument(filePath)
+      }
+    }
+  }
+
   async runMonocart () {
     const MCR = await this.getMonocart()
     if (!MCR) {
       return
     }
 
-    const argv = this.monocartArgv
-    const exclude = this.exclude
-
-    function getEntryFilter () {
-      return argv.entryFilter || argv.filter || function (entry) {
-        return exclude.shouldInstrument(fileURLToPath(entry.url))
-      }
-    }
-
-    function getSourceFilter () {
-      return argv.sourceFilter || argv.filter || function (sourcePath) {
-        if (argv.excludeAfterRemap) {
-          // console.log(sourcePath)
-          return exclude.shouldInstrument(sourcePath)
-        }
-        return true
-      }
-    }
-
-    function getReports () {
-      const reports = Array.isArray(argv.reporter) ? argv.reporter : [argv.reporter]
-      const reporterOptions = argv.reporterOptions || {}
-
-      return reports.map((reportName) => {
-        const reportOptions = {
-          ...reporterOptions[reportName]
-        }
-        if (reportName === 'text') {
-          reportOptions.skipEmpty = false
-          reportOptions.skipFull = argv.skipFull
-          reportOptions.maxCols = process.stdout.columns || 100
-        }
-        return [reportName, reportOptions]
-      })
-    }
-
-    // --all: add empty coverage for all files
-    function getAllOptions () {
-      if (!argv.all) {
-        return
-      }
-
-      const src = argv.src
-      const workingDirs = Array.isArray(src) ? src : (typeof src === 'string' ? [src] : [process.cwd()])
-      return {
-        dir: workingDirs,
-        filter: (filePath) => {
-          return exclude.shouldInstrument(filePath)
-        }
-      }
-    }
+    const argv = this.#monocartArgv
 
     function initPct (summary) {
       Object.keys(summary).forEach(k => {
@@ -177,22 +232,22 @@ class Report {
     }
 
     // adapt coverage options
-    const coverageOptions = {
+    const coverageOptions: CoverageReportOptions = {
       logging: argv.logging,
       name: argv.name,
 
-      reports: getReports(),
+      reports: this.#getMonocartReports(),
 
       outputDir: argv.reportsDir,
       baseDir: argv.baseDir,
 
-      entryFilter: getEntryFilter(),
-      sourceFilter: getSourceFilter(),
+      entryFilter: this.#computeMonocartEntryFilter(),
+      sourceFilter: this.#computeMonocartSourceFilter(),
 
       inline: argv.inline,
       lcov: argv.lcov,
 
-      all: getAllOptions(),
+      all: this.#getMonocartAllOptions(),
 
       clean: argv.clean,
 
@@ -239,7 +294,7 @@ class Report {
     const map = libCoverage.createCoverageMap()
     let v8ProcessCov
 
-    if (this.mergeAsync) {
+    if (this.#mergeAsync) {
       v8ProcessCov = await this._getMergedProcessCovAsync()
     } else {
       v8ProcessCov = this._getMergedProcessCov()
@@ -249,9 +304,9 @@ class Report {
     for (const v8ScriptCov of v8ProcessCov.result) {
       try {
         const sources = this._getSourceMap(v8ScriptCov)
-        const path = resolve(this.resolve, v8ScriptCov.url)
-        const converter = v8toIstanbul(path, this.wrapperLength, sources, (path) => {
-          if (this.excludeAfterRemap) {
+        const path = resolve(this.#resolve, v8ScriptCov.url)
+        const converter = v8toIstanbul(path, this.#wrapperLength, sources, (path) => {
+          if (this.#excludeAfterRemap) {
             return !this._shouldInstrument(path)
           }
         })
@@ -286,7 +341,7 @@ class Report {
    */
   _getSourceMap (v8ScriptCov) {
     const sources = {}
-    const sourceMapAndLineLengths = this.sourceMapCache[pathToFileURL(v8ScriptCov.url).href]
+    const sourceMapAndLineLengths = this.#sourceMapCache[pathToFileURL(v8ScriptCov.url).href]
     if (sourceMapAndLineLengths) {
       // See: https://github.com/nodejs/node/pull/34305
       if (!sourceMapAndLineLengths.data) return
@@ -314,19 +369,19 @@ class Report {
    * @private
    */
   _getMergedProcessCov () {
-    const { mergeProcessCovs } = require('@bcoe/v8-coverage')
+    import { mergeProcessCovs } from '@bcoe/v8-coverage'
     const v8ProcessCovs = []
     const fileIndex = new Set() // Set<string>
     for (const v8ProcessCov of this._loadReports()) {
       if (this._isCoverageObject(v8ProcessCov)) {
         if (v8ProcessCov['source-map-cache']) {
-          Object.assign(this.sourceMapCache, this._normalizeSourceMapCache(v8ProcessCov['source-map-cache']))
+          Object.assign(this.#sourceMapCache, this._normalizeSourceMapCache(v8ProcessCov['source-map-cache']))
         }
         v8ProcessCovs.push(this._normalizeProcessCov(v8ProcessCov, fileIndex))
       }
     }
 
-    if (this.all) {
+    if (this.#all) {
       const emptyReports = this._includeUncoveredFiles(fileIndex)
       v8ProcessCovs.unshift({
         result: emptyReports
@@ -347,20 +402,20 @@ class Report {
    * @private
    */
   async _getMergedProcessCovAsync () {
-    const { mergeProcessCovs } = require('@bcoe/v8-coverage')
+    import { mergeProcessCovs } from '@bcoe/v8-coverage'
     const fileIndex = new Set() // Set<string>
     let mergedCov = null
-    for (const file of readdirSync(this.tempDirectory)) {
+    for (const file of readdirSync(this.#tempDirectory)) {
       try {
         const rawFile = await readFile(
-          resolve(this.tempDirectory, file),
+          resolve(this.#tempDirectory, file),
           'utf8'
         )
         let report = JSON.parse(rawFile)
 
         if (this._isCoverageObject(report)) {
           if (report['source-map-cache']) {
-            Object.assign(this.sourceMapCache, this._normalizeSourceMapCache(report['source-map-cache']))
+            Object.assign(this.#sourceMapCache, this._normalizeSourceMapCache(report['source-map-cache']))
           }
           report = this._normalizeProcessCov(report, fileIndex)
           if (mergedCov) {
@@ -374,7 +429,7 @@ class Report {
       }
     }
 
-    if (this.all) {
+    if (this.#all) {
       const emptyReports = this._includeUncoveredFiles(fileIndex)
       const emptyReport = {
         result: emptyReports
@@ -395,10 +450,10 @@ class Report {
    */
   _includeUncoveredFiles (fileIndex) {
     const emptyReports = []
-    const workingDirs = this.src
-    const { extension } = this.exclude
+    const workingDirs = this.#src
+    const { extension } = this.#exclude
     for (const workingDir of workingDirs) {
-      this.exclude.globSync(workingDir).forEach((f) => {
+      this.#exclude.globSync(workingDir).forEach((f) => {
         const fullPath = resolve(workingDir, f)
         if (!fileIndex.has(fullPath)) {
           const ext = extname(fullPath)
@@ -406,7 +461,7 @@ class Report {
             const stat = statSync(fullPath)
             const sourceMap = getSourceMapFromFile(fullPath)
             if (sourceMap) {
-              this.sourceMapCache[pathToFileURL(fullPath)] = { data: sourceMap }
+              this.#sourceMapCache[pathToFileURL(fullPath)] = { data: sourceMap }
             }
             emptyReports.push({
               scriptId: 0,
@@ -447,10 +502,10 @@ class Report {
    */
   _loadReports () {
     const reports = []
-    for (const file of readdirSync(this.tempDirectory)) {
+    for (const file of readdirSync(this.#tempDirectory)) {
       try {
         reports.push(JSON.parse(readFileSync(
-          resolve(this.tempDirectory, file),
+          resolve(this.#tempDirectory, file),
           'utf8'
         )))
       } catch (err) {
@@ -493,8 +548,8 @@ class Report {
           continue
         }
       }
-      if ((!this.omitRelative || isAbsolute(v8ScriptCov.url))) {
-        if (this.excludeAfterRemap || this._shouldInstrument(v8ScriptCov.url)) {
+      if ((!this.#omitRelative || isAbsolute(v8ScriptCov.url))) {
+        if (this.#excludeAfterRemap || this._shouldInstrument(v8ScriptCov.url)) {
           result.push(v8ScriptCov)
         }
       }
@@ -526,17 +581,13 @@ class Report {
    * @return {boolean}
    */
   _shouldInstrument (filename) {
-    const cacheResult = this.shouldInstrumentCache.get(filename)
+    const cacheResult = this.#shouldInstrumentCache.get(filename)
     if (cacheResult !== undefined) {
       return cacheResult
     }
 
-    const result = this.exclude.shouldInstrument(filename)
-    this.shouldInstrumentCache.set(filename, result)
+    const result = this.#exclude.shouldInstrument(filename)
+    this.#shouldInstrumentCache.set(filename, result)
     return result
   }
-}
-
-module.exports = function (opts) {
-  return new Report(opts)
 }
