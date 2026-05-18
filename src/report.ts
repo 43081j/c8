@@ -1,7 +1,9 @@
 import Exclude from 'test-exclude'
 import libCoverage from 'istanbul-lib-coverage'
+import type { CoverageMap, CoverageSummary, FileCoverage } from 'istanbul-lib-coverage'
 import libReport from 'istanbul-lib-report'
 import reports from 'istanbul-reports'
+import { mergeProcessCovs, ProcessCov, ScriptCov } from '@bcoe/v8-coverage'
 import {readFile} from 'node:fs/promises';
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { isAbsolute, resolve, extname } from 'node:path'
@@ -10,10 +12,26 @@ import {getSourceMapFromFile} from './source-map-from-file.js'
 // TODO: switch back to @c88/v8-coverage once patch is landed.
 import v8toIstanbul from 'v8-to-istanbul'
 import util from 'node:util'
-import { ReportDescription, V8CoverageEntry, type CoverageReportOptions } from 'monocart-coverage-reports';
+import type {
+  ReportDescription,
+  V8CoverageEntry,
+  CoverageReportOptions,
+  CoverageResults,
+  CoverageSummary as MCRCoverageSummary
+} from 'monocart-coverage-reports';
 
 const debuglog = util.debuglog('c8')
 const DEFAULT_MAX_COLS = 100
+
+function initialiseMonocartPercentages(
+  summary: MCRCoverageSummary
+) {
+  for (const val of Object.values(summary)) {
+    if (val.pct === '') {
+      val.pct = 100
+    }
+  }
+}
 
 export interface ReportOptions {
   exclude: string[]
@@ -55,6 +73,7 @@ export class Report {
   #skipFull: boolean
   #mergeAsync: boolean
   #monocartArgv: CoverageReportOptions | undefined
+  #allCoverageFiles: CoverageMap | undefined = undefined;
 
   constructor ({
     exclude,
@@ -214,6 +233,37 @@ export class Report {
     }
   }
 
+  #onMonocartEnd = (coverageResults: CoverageResults | undefined) => {
+    if (!coverageResults) {
+      return
+    }
+
+    // for check coverage
+    this.#allCoverageFiles = {
+      files: () => {
+        return coverageResults.files.map(it => it.sourcePath)
+      },
+      fileCoverageFor: (file: string) => {
+        const fileCoverage = coverageResults.files.find(it => it.sourcePath === file)
+
+        if (!fileCoverage) {
+          throw new Error(`No file coverage found for ${file}`)
+        }
+
+        return {
+          toSummary: () => {
+            initialiseMonocartPercentages(fileCoverage.summary);
+            return fileCoverage.summary;
+          }
+        } as unknown as FileCoverage
+      },
+      getCoverageSummary: () => {
+        initialiseMonocartPercentages(coverageResults.summary);
+        return coverageResults.summary as unknown as CoverageSummary;
+      }
+    } as unknown as CoverageMap;
+  };
+
   async runMonocart () {
     const MCR = await this.getMonocart()
     if (!MCR) {
@@ -222,13 +272,8 @@ export class Report {
 
     const argv = this.#monocartArgv
 
-    function initPct (summary) {
-      Object.keys(summary).forEach(k => {
-        if (summary[k].pct === '') {
-          summary[k].pct = 100
-        }
-      })
-      return summary
+    if (!argv) {
+      return
     }
 
     // adapt coverage options
@@ -254,26 +299,9 @@ export class Report {
       // use default value for istanbul
       defaultSummarizer: 'pkg',
 
-      onEnd: (coverageResults) => {
-        // for check coverage
-        this._allCoverageFiles = {
-          files: () => {
-            return coverageResults.files.map(it => it.sourcePath)
-          },
-          fileCoverageFor: (file) => {
-            const fileCoverage = coverageResults.files.find(it => it.sourcePath === file)
-            return {
-              toSummary: () => {
-                return initPct(fileCoverage.summary)
-              }
-            }
-          },
-          getCoverageSummary: () => {
-            return initPct(coverageResults.summary)
-          }
-        }
-      }
+      onEnd: this.#onMonocartEnd
     }
+
     const coverageReport = new MCR.CoverageReport(coverageOptions)
     coverageReport.cleanCache()
 
@@ -289,10 +317,12 @@ export class Report {
     // check-coverage is called immediately after a report. We memoize the
     // result from getCoverageMapFromAllCoverageFiles() to address this
     // use-case.
-    if (this._allCoverageFiles) return this._allCoverageFiles
+    if (this.#allCoverageFiles) {
+      return this.#allCoverageFiles
+    }
 
     const map = libCoverage.createCoverageMap()
-    let v8ProcessCov
+    let v8ProcessCov: ProcessCov | null = null
 
     if (this.#mergeAsync) {
       v8ProcessCov = await this._getMergedProcessCovAsync()
@@ -301,32 +331,35 @@ export class Report {
     }
     const resultCountPerPath = new Map()
 
-    for (const v8ScriptCov of v8ProcessCov.result) {
-      try {
-        const sources = this._getSourceMap(v8ScriptCov)
-        const path = resolve(this.#resolve, v8ScriptCov.url)
-        const converter = v8toIstanbul(path, this.#wrapperLength, sources, (path) => {
-          if (this.#excludeAfterRemap) {
-            return !this._shouldInstrument(path)
+    if (v8ProcessCov) {
+      for (const v8ScriptCov of v8ProcessCov.result) {
+        try {
+          const sources = this._getSourceMap(v8ScriptCov)
+          const path = resolve(this.#resolve, v8ScriptCov.url)
+          const converter = v8toIstanbul(path, this.#wrapperLength, sources, (path) => {
+            if (this.#excludeAfterRemap) {
+              return !this._shouldInstrument(path)
+            }
+          })
+          await converter.load()
+
+          if (resultCountPerPath.has(path)) {
+            resultCountPerPath.set(path, resultCountPerPath.get(path) + 1)
+          } else {
+            resultCountPerPath.set(path, 0)
           }
-        })
-        await converter.load()
 
-        if (resultCountPerPath.has(path)) {
-          resultCountPerPath.set(path, resultCountPerPath.get(path) + 1)
-        } else {
-          resultCountPerPath.set(path, 0)
+          converter.applyCoverage(v8ScriptCov.functions)
+          map.merge(converter.toIstanbul())
+        } catch (err) {
+          const stack = err instanceof Error ? err.stack : String(err)
+          debuglog(`file: ${v8ScriptCov.url} error: ${stack}`)
         }
-
-        converter.applyCoverage(v8ScriptCov.functions)
-        map.merge(converter.toIstanbul())
-      } catch (err) {
-        debuglog(`file: ${v8ScriptCov.url} error: ${err.stack}`)
       }
     }
 
-    this._allCoverageFiles = map
-    return this._allCoverageFiles
+    this.#allCoverageFiles = map
+    return this.#allCoverageFiles
   }
 
   /**
@@ -339,8 +372,14 @@ export class Report {
    * @return {Object} sourceMap and fake source file (created from line #s).
    * @private
    */
-  _getSourceMap (v8ScriptCov) {
-    const sources = {}
+  _getSourceMap (v8ScriptCov: ScriptCov) {
+    const sources: {
+      source: string
+      originalSource?: string
+      sourceMap?: { sourcemap: unknown }
+    } = {
+      source: ''
+    };
     const sourceMapAndLineLengths = this.#sourceMapCache[pathToFileURL(v8ScriptCov.url).href]
     if (sourceMapAndLineLengths) {
       // See: https://github.com/nodejs/node/pull/34305
@@ -368,8 +407,7 @@ export class Report {
    * @return {ProcessCov} Merged V8 process coverage.
    * @private
    */
-  _getMergedProcessCov () {
-    import { mergeProcessCovs } from '@bcoe/v8-coverage'
+  _getMergedProcessCov (): ProcessCov {
     const v8ProcessCovs = []
     const fileIndex = new Set() // Set<string>
     for (const v8ProcessCov of this._loadReports()) {
@@ -401,8 +439,7 @@ export class Report {
    * @return {ProcessCov} Merged V8 process coverage.
    * @private
    */
-  async _getMergedProcessCovAsync () {
-    import { mergeProcessCovs } from '@bcoe/v8-coverage'
+  async _getMergedProcessCovAsync (): Promise<ProcessCov | null> {
     const fileIndex = new Set() // Set<string>
     let mergedCov = null
     for (const file of readdirSync(this.#tempDirectory)) {
@@ -425,11 +462,12 @@ export class Report {
           }
         }
       } catch (err) {
-        debuglog(`${err.stack}`)
+        const stack = err instanceof Error ? err.stack : String(err)
+        debuglog(`${stack}`)
       }
     }
 
-    if (this.#all) {
+    if (this.#all && mergedCov) {
       const emptyReports = this._includeUncoveredFiles(fileIndex)
       const emptyReport = {
         result: emptyReports

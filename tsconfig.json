@@ -9,7 +9,7 @@
     "declaration": true,
     "declarationMap": false,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
+    "exactOptionalPropertyTypes": false,
     "noImplicitReturns": true,
     "noImplicitOverride": true,
     "noUnusedLocals": true,
@@ -20,5 +20,5 @@
     "erasableSyntaxOnly": true,
     "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["src", "types"]
 }
