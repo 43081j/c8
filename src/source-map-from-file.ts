@@ -29,6 +29,9 @@ const { fileURLToPath, pathToFileURL } = require('url');
 const util = require('util');
 const debuglog = util.debuglog('c8');
 
+const sourceMapLineRE =
+  /\/[*/]#\s+sourceMappingURL=(?<sourceMappingURL>[^\s]+)/;
+
 /**
  * Extract the sourcemap url from a source file
  * reference: https://sourcemaps.info/spec.html
@@ -36,10 +39,10 @@ const debuglog = util.debuglog('c8');
  * @returns {String} full path to source map file
  * @private
  */
-function getSourceMapFromFile(filename) {
+export function getSourceMapFromFile(
+  filename: string,
+): Record<string, unknown> | null {
   const fileBody = readFileSync(filename).toString();
-  const sourceMapLineRE =
-    /\/[*/]#\s+sourceMappingURL=(?<sourceMappingURL>[^\s]+)/;
   const results = fileBody.match(sourceMapLineRE);
   if (results !== null) {
     const sourceMappingURL = results.groups.sourceMappingURL;
@@ -50,7 +53,10 @@ function getSourceMapFromFile(filename) {
   }
 }
 
-function dataFromUrl(sourceURL, sourceMappingURL) {
+function dataFromUrl(
+  sourceURL: string,
+  sourceMappingURL: string,
+): Record<string, unknown> | null {
   try {
     const url = new URL(sourceMappingURL);
     switch (url.protocol) {
@@ -67,7 +73,7 @@ function dataFromUrl(sourceURL, sourceMappingURL) {
   }
 }
 
-function sourceMapFromFile(mapURL) {
+function sourceMapFromFile(mapURL: string): Record<string, unknown> | null {
   try {
     const content = readFileSync(fileURLToPath(mapURL), 'utf8');
     return JSON.parse(content);
@@ -79,8 +85,9 @@ function sourceMapFromFile(mapURL) {
 
 // data:[<mediatype>][;base64],<data> see:
 // https://tools.ietf.org/html/rfc2397#section-2
-function sourceMapFromDataUrl(url) {
-  const { 0: format, 1: data } = url.split(',');
+function sourceMapFromDataUrl(url: string): Record<string, unknown> | null {
+  // TODO (jg): is this really a safe cast?
+  const { 0: format, 1: data } = url.split(',') as [string, string];
   const splitFormat = format.split(';');
   const contentType = splitFormat[0];
   const base64 = splitFormat[splitFormat.length - 1] === 'base64';
@@ -99,5 +106,3 @@ function sourceMapFromDataUrl(url) {
     return null;
   }
 }
-
-module.exports = getSourceMapFromFile;
