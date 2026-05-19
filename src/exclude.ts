@@ -1,6 +1,6 @@
 import path from 'node:path';
-import { glob } from 'glob';
-import { minimatch } from 'minimatch';
+import { glob } from 'tinyglobby';
+import picomatch from 'picomatch';
 
 const isOutsideDir = (dir: string, file: string): boolean => {
   const relative = path.relative(dir, file);
@@ -36,14 +36,49 @@ const DEFAULT_EXCLUDE = [
   '**/.{eslint,mocha}rc.{js,cjs}',
 ];
 const LEADING_DOT_SPECIFIER = /^\.[\\/]/;
+const DEFAULT_INCLUDE_MATCHER = () => true;
+const DEFAULT_EXCLUDE_MATCHER = picomatch(DEFAULT_EXCLUDE as string[], {
+  dot: true,
+});
 
 export class TestExclude {
   relativePath: boolean = true;
   cwd: string = process.cwd();
-  exclude: readonly string[] = DEFAULT_EXCLUDE;
   excludeNodeModules: boolean = true;
-  include: readonly string[] = [];
   extension: readonly string[] = DEFAULT_EXTENSIONS;
+
+  #exclude: readonly string[] = DEFAULT_EXCLUDE;
+  #excludeMatcher: (filename: string) => boolean = DEFAULT_EXCLUDE_MATCHER;
+
+  #include: readonly string[] = [];
+  #includeMatcher: (filename: string) => boolean = DEFAULT_INCLUDE_MATCHER;
+
+  get include() {
+    return this.#include;
+  }
+
+  set include(value: readonly string[]) {
+    const includeMatches =
+      value.length === 0
+        ? DEFAULT_INCLUDE_MATCHER
+        : picomatch(value as string[], {
+            dot: true,
+          });
+    this.#include = value;
+    this.#includeMatcher = includeMatches;
+  }
+
+  get exclude() {
+    return this.#exclude;
+  }
+
+  set exclude(value: readonly string[]) {
+    const excludeMatches = picomatch(value as string[], {
+      dot: true,
+    });
+    this.#exclude = value;
+    this.#excludeMatcher = excludeMatches;
+  }
 
   constructor(opts: TestExcludeOptions = {}) {
     if (opts.include !== undefined) {
@@ -104,40 +139,18 @@ export class TestExclude {
       pathToCheck = relFile.replace(LEADING_DOT_SPECIFIER, ''); // remove leading './' or '.\'.
     }
 
-    const dot = { dot: true };
-    const matches = (pattern: string) => minimatch(pathToCheck, pattern, dot);
     return (
-      (this.include.length === 0 || this.include.some(matches)) &&
-      !this.exclude.some(matches)
+      this.#includeMatcher(pathToCheck) && !this.#excludeMatcher(pathToCheck)
     );
   }
 
-  globSync(cwd: string = this.cwd): readonly string[] {
-    const globPatterns = getExtensionPattern(this.extension || []);
-    const globOptions = {
-      cwd,
-      nodir: true,
-      dot: true,
-      posix: true,
-      ignore: this.exclude,
-    };
-
-    return glob
-      .sync(globPatterns, globOptions)
-      .filter((file: string) => this.shouldInstrument(path.resolve(cwd, file)));
-  }
-
-  async glob(cwd = this.cwd): Promise<readonly string[]> {
+  async glob(cwd: string = this.cwd): Promise<readonly string[]> {
     const globPatterns = getExtensionPattern(this.extension);
-    const globOptions = {
+    const list = await glob(globPatterns, {
       cwd,
-      nodir: true,
       dot: true,
-      posix: true,
       ignore: this.exclude,
-    };
-
-    const list = await glob(globPatterns, globOptions);
+    });
     return list.filter((file: string) =>
       this.shouldInstrument(path.resolve(cwd, file)),
     );
