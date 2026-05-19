@@ -1,86 +1,87 @@
-const { relative } = require('path');
-const Report = require('../report');
+import { relative } from 'node:path';
+import { Report } from '../report.js';
+import type { CliOptions } from '../cli.js';
 
-exports.command = 'check-coverage';
+interface Thresholds {
+  lines: number;
+  functions: number;
+  branches: number;
+  statements: number;
+}
 
-exports.describe = 'check whether coverage is within thresholds provided';
+interface Summary {
+  lines: { pct: number };
+  functions: { pct: number };
+  branches: { pct: number };
+  statements: { pct: number };
+}
 
-exports.builder = function (yargs) {
-  yargs.example(
-    '$0 check-coverage --lines 95',
-    "check whether the JSON in c8's output folder meets the thresholds provided",
-  );
-};
-
-exports.handler = function (argv) {
-  // TODO: this is a workaround until yargs gets upgraded to v17, see https://github.com/bcoe/c8/pull/332#discussion_r721636191
-  if (argv['100']) {
-    argv.lines = 100;
-    argv.functions = 100;
-    argv.branches = 100;
-    argv.statements = 100;
-  }
-
-  const report = Report({
-    include: argv.include,
-    exclude: argv.exclude,
-    extension: argv.extension,
-    reporter: Array.isArray(argv.reporter) ? argv.reporter : [argv.reporter],
-    reportsDirectory: argv['reports-dir'],
-    tempDirectory: argv.tempDirectory,
-    watermarks: argv.watermarks,
-    resolve: argv.resolve,
-    omitRelative: argv.omitRelative,
-    wrapperLength: argv.wrapperLength,
-    all: argv.all,
+export async function runCheckCoverage(opts: CliOptions): Promise<void> {
+  const report = new Report({
+    include: opts.include,
+    exclude: opts.exclude,
+    extension: opts.extension,
+    excludeAfterRemap: opts.excludeAfterRemap,
+    reporter: opts.reporter,
+    reportsDirectory: opts.reportsDirectory,
+    reporterOptions: opts.reporterOptions,
+    tempDirectory: opts.tempDirectory,
+    watermarks: opts.watermarks,
+    resolve: opts.resolve,
+    omitRelative: opts.omitRelative,
+    wrapperLength: opts.wrapperLength,
+    all: opts.all,
+    allowExternal: opts.allowExternal,
+    src: opts.src,
+    skipFull: opts.skipFull,
+    excludeNodeModules: opts.excludeNodeModules,
+    mergeAsync: opts.mergeAsync,
   });
-  exports.checkCoverages(argv, report);
-};
+  await checkCoverages(opts, report);
+}
 
-exports.checkCoverages = async function (argv, report) {
-  const thresholds = {
-    lines: argv.lines,
-    functions: argv.functions,
-    branches: argv.branches,
-    statements: argv.statements,
+export async function checkCoverages(
+  opts: CliOptions,
+  report: Report,
+): Promise<void> {
+  const thresholds: Thresholds = {
+    lines: opts.lines,
+    functions: opts.functions,
+    branches: opts.branches,
+    statements: opts.statements,
   };
   const map = await report.getCoverageMapFromAllCoverageFiles();
-  if (argv.perFile) {
-    map.files().forEach((file) => {
-      checkCoverage(map.fileCoverageFor(file).toSummary(), thresholds, file);
-    });
-  } else {
-    checkCoverage(map.getCoverageSummary(), thresholds);
-  }
-};
-
-function checkCoverage(summary, thresholds, file) {
-  Object.keys(thresholds).forEach((key) => {
-    const coverage = summary[key].pct;
-    if (coverage < thresholds[key]) {
-      process.exitCode = 1;
-      if (file) {
-        console.error(
-          'ERROR: Coverage for ' +
-            key +
-            ' (' +
-            coverage +
-            '%) does not meet threshold (' +
-            thresholds[key] +
-            '%) for ' +
-            relative('./', file).replace(/\\/g, '/'), // standardize path for Windows.
-        );
-      } else {
-        console.error(
-          'ERROR: Coverage for ' +
-            key +
-            ' (' +
-            coverage +
-            '%) does not meet global threshold (' +
-            thresholds[key] +
-            '%)',
-        );
-      }
+  if (opts.perFile) {
+    for (const file of map.files()) {
+      checkCoverage(
+        map.fileCoverageFor(file).toSummary() as unknown as Summary,
+        thresholds,
+        file,
+      );
     }
-  });
+  } else {
+    checkCoverage(map.getCoverageSummary() as unknown as Summary, thresholds);
+  }
+}
+
+function checkCoverage(
+  summary: Summary,
+  thresholds: Thresholds,
+  file?: string,
+): void {
+  for (const key of Object.keys(thresholds) as Array<keyof Thresholds>) {
+    const coverage = summary[key].pct;
+    if (coverage >= thresholds[key]) continue;
+
+    process.exitCode = 1;
+    if (file) {
+      console.error(
+        `ERROR: Coverage for ${key} (${coverage}%) does not meet threshold (${thresholds[key]}%) for ${relative('./', file).replace(/\\/g, '/')}`,
+      );
+    } else {
+      console.error(
+        `ERROR: Coverage for ${key} (${coverage}%) does not meet global threshold (${thresholds[key]}%)`,
+      );
+    }
+  }
 }

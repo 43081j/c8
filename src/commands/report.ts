@@ -1,47 +1,35 @@
-const { checkCoverages } = require('./check-coverage');
-const Report = require('../report');
+import type { CoverageReportOptions } from 'monocart-coverage-reports';
+import { Report } from '../report.js';
+import { checkCoverages } from './check-coverage.js';
+import type { CliOptions } from '../cli.js';
 
-exports.command = 'report';
+export async function outputReport(opts: CliOptions): Promise<void> {
+  const useMonocart =
+    opts.experimentalMonocart || process.env.EXPERIMENTAL_MONOCART !== undefined;
 
-exports.describe = 'read V8 coverage data from temp and output report';
-
-exports.handler = async function (argv) {
-  await exports.outputReport(argv);
-};
-
-exports.outputReport = async function (argv) {
-  // TODO: this is a workaround until yargs gets upgraded to v17, see https://github.com/bcoe/c8/pull/332#discussion_r721636191
-  if (argv['100']) {
-    argv.checkCoverage = 100;
-    argv.lines = 100;
-    argv.functions = 100;
-    argv.branches = 100;
-    argv.statements = 100;
-  }
-  const report = Report({
-    include: argv.include,
-    exclude: argv.exclude,
-    extension: argv.extension,
-    excludeAfterRemap: argv.excludeAfterRemap,
-    reporter: Array.isArray(argv.reporter) ? argv.reporter : [argv.reporter],
-    reportsDirectory: argv['reports-dir'],
-    reporterOptions: argv.reporterOptions || {},
-    tempDirectory: argv.tempDirectory,
-    watermarks: argv.watermarks,
-    resolve: argv.resolve,
-    omitRelative: argv.omitRelative,
-    wrapperLength: argv.wrapperLength,
-    all: argv.all,
-    allowExternal: argv.allowExternal,
-    src: argv.src,
-    skipFull: argv.skipFull,
-    excludeNodeModules: argv.excludeNodeModules,
-    mergeAsync: argv.mergeAsync,
-    monocartArgv:
-      argv.experimentalMonocart || process.env.EXPERIMENTAL_MONOCART
-        ? argv
-        : null,
+  const report = new Report({
+    include: opts.include,
+    exclude: opts.exclude,
+    extension: opts.extension,
+    excludeAfterRemap: opts.excludeAfterRemap,
+    reporter: opts.reporter,
+    reportsDirectory: opts.reportsDirectory,
+    reporterOptions: opts.reporterOptions ?? {},
+    tempDirectory: opts.tempDirectory,
+    watermarks: opts.watermarks,
+    resolve: opts.resolve,
+    omitRelative: opts.omitRelative,
+    wrapperLength: opts.wrapperLength,
+    all: opts.all,
+    allowExternal: opts.allowExternal,
+    src: opts.src,
+    skipFull: opts.skipFull,
+    excludeNodeModules: opts.excludeNodeModules,
+    mergeAsync: opts.mergeAsync,
+    monocartArgv: useMonocart
+      ? (opts as unknown as CoverageReportOptions)
+      : undefined,
   });
   await report.run();
-  if (argv.checkCoverage) await checkCoverages(argv, report);
-};
+  if (opts.checkCoverage) await checkCoverages(opts, report);
+}
