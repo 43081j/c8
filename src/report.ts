@@ -1,88 +1,95 @@
-import {TestExclude} from './exclude.js'
-import libCoverage from 'istanbul-lib-coverage'
-import type { CoverageMap, CoverageSummary, FileCoverage } from 'istanbul-lib-coverage'
-import libReport from 'istanbul-lib-report'
-import reports from 'istanbul-reports'
-import { mergeProcessCovs, ProcessCov, ScriptCov } from '@bcoe/v8-coverage'
-import {readFile} from 'node:fs/promises';
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { isAbsolute, resolve, extname } from 'node:path'
-import { pathToFileURL, fileURLToPath } from 'node:url'
-import {getSourceMapFromFile} from './source-map-from-file.js'
+import { TestExclude } from './exclude.js';
+import libCoverage from 'istanbul-lib-coverage';
+import type {
+  CoverageMap,
+  CoverageSummary,
+  FileCoverage,
+} from 'istanbul-lib-coverage';
+import libReport from 'istanbul-lib-report';
+import reports from 'istanbul-reports';
+import { mergeProcessCovs, ProcessCov, ScriptCov } from '@bcoe/v8-coverage';
+import { readFile } from 'node:fs/promises';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { isAbsolute, resolve, extname } from 'node:path';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import { getSourceMapFromFile } from './source-map-from-file.js';
 // TODO: switch back to @c88/v8-coverage once patch is landed.
-import v8toIstanbul from 'v8-to-istanbul'
-import util from 'node:util'
+import v8toIstanbul from 'v8-to-istanbul';
+import util from 'node:util';
 import type {
   ReportDescription,
   V8CoverageEntry,
   CoverageReportOptions,
   CoverageResults,
-  CoverageSummary as MCRCoverageSummary
+  CoverageSummary as MCRCoverageSummary,
 } from 'monocart-coverage-reports';
 
-const debuglog = util.debuglog('c8')
-const DEFAULT_MAX_COLS = 100
+const debuglog = util.debuglog('c8');
+const DEFAULT_MAX_COLS = 100;
 
 interface NodeProcessCovExtension {
-  'source-map-cache'?: Record<string, { data: unknown; lineLengths?: number[] } | null>
+  'source-map-cache'?: Record<
+    string,
+    { data: unknown; lineLengths?: number[] } | null
+  >;
 }
 
-type NodeProcessCov = ProcessCov & NodeProcessCovExtension
-type NodeSourceMapCache = NonNullable<NodeProcessCovExtension['source-map-cache']>
+type NodeProcessCov = ProcessCov & NodeProcessCovExtension;
+type NodeSourceMapCache = NonNullable<
+  NodeProcessCovExtension['source-map-cache']
+>;
 
-function initialiseMonocartPercentages(
-  summary: MCRCoverageSummary
-) {
+function initialiseMonocartPercentages(summary: MCRCoverageSummary) {
   for (const val of Object.values(summary)) {
     if (val.pct === '') {
-      val.pct = 100
+      val.pct = 100;
     }
   }
 }
 
 export interface ReportOptions {
-  exclude: readonly string[]
-  extension: readonly string[]
-  excludeAfterRemap: boolean
-  include: readonly string[]
-  reporter: readonly string[]
-  reporterOptions?: Record<string, Record<string, unknown>>
-  reportsDirectory: string
-  tempDirectory: string
-  watermarks: Record<string, [number, number]>
-  omitRelative: boolean
-  wrapperLength: number
-  resolve: string
-  all: boolean
-  src?: string | readonly string[]
-  allowExternal?: boolean
-  skipFull: boolean
-  excludeNodeModules: boolean
-  mergeAsync: boolean
-  monocartArgv?: CoverageReportOptions
+  exclude: readonly string[];
+  extension: readonly string[];
+  excludeAfterRemap: boolean;
+  include: readonly string[];
+  reporter: readonly string[];
+  reporterOptions?: Record<string, Record<string, unknown>>;
+  reportsDirectory: string;
+  tempDirectory: string;
+  watermarks: Record<string, [number, number]>;
+  omitRelative: boolean;
+  wrapperLength: number;
+  resolve: string;
+  all: boolean;
+  src?: string | readonly string[];
+  allowExternal?: boolean;
+  skipFull: boolean;
+  excludeNodeModules: boolean;
+  mergeAsync: boolean;
+  monocartArgv?: CoverageReportOptions;
 }
 
 export class Report {
-  #reporter: readonly string[]
-  #reporterOptions: Record<string, Record<string, unknown>>
-  #reportsDirectory: string
-  #tempDirectory: string
-  #watermarks: Record<string, [number, number]>
-  #resolve: string
-  #exclude: TestExclude
-  #excludeAfterRemap: boolean
-  #shouldInstrumentCache: Map<string, boolean>
-  #omitRelative: boolean
-  #sourceMapCache: NodeSourceMapCache
-  #wrapperLength: number
-  #all: boolean
-  #src: readonly string[]
-  #skipFull: boolean
-  #mergeAsync: boolean
-  #monocartArgv: CoverageReportOptions | undefined
+  #reporter: readonly string[];
+  #reporterOptions: Record<string, Record<string, unknown>>;
+  #reportsDirectory: string;
+  #tempDirectory: string;
+  #watermarks: Record<string, [number, number]>;
+  #resolve: string;
+  #exclude: TestExclude;
+  #excludeAfterRemap: boolean;
+  #shouldInstrumentCache: Map<string, boolean>;
+  #omitRelative: boolean;
+  #sourceMapCache: NodeSourceMapCache;
+  #wrapperLength: number;
+  #all: boolean;
+  #src: readonly string[];
+  #skipFull: boolean;
+  #mergeAsync: boolean;
+  #monocartArgv: CoverageReportOptions | undefined;
   #allCoverageFiles: CoverageMap | undefined = undefined;
 
-  constructor ({
+  constructor({
     exclude,
     extension,
     excludeAfterRemap,
@@ -101,89 +108,93 @@ export class Report {
     skipFull,
     excludeNodeModules,
     mergeAsync,
-    monocartArgv
+    monocartArgv,
   }: ReportOptions) {
-    this.#reporter = reporter
-    this.#reporterOptions = reporterOptions || {}
-    this.#reportsDirectory = reportsDirectory
-    this.#tempDirectory = tempDirectory
-    this.#watermarks = watermarks
-    this.#resolve = resolvePaths
+    this.#reporter = reporter;
+    this.#reporterOptions = reporterOptions || {};
+    this.#reportsDirectory = reportsDirectory;
+    this.#tempDirectory = tempDirectory;
+    this.#watermarks = watermarks;
+    this.#resolve = resolvePaths;
     this.#exclude = new TestExclude({
       exclude: exclude,
       include: include,
       extension: extension,
       relativePath: !allowExternal,
-      excludeNodeModules: excludeNodeModules
-    })
-    this.#excludeAfterRemap = excludeAfterRemap
-    this.#shouldInstrumentCache = new Map()
-    this.#omitRelative = omitRelative
-    this.#sourceMapCache = {}
-    this.#wrapperLength = wrapperLength
-    this.#all = all
-    this.#skipFull = skipFull
-    this.#mergeAsync = mergeAsync
-    this.#monocartArgv = monocartArgv
+      excludeNodeModules: excludeNodeModules,
+    });
+    this.#excludeAfterRemap = excludeAfterRemap;
+    this.#shouldInstrumentCache = new Map();
+    this.#omitRelative = omitRelative;
+    this.#sourceMapCache = {};
+    this.#wrapperLength = wrapperLength;
+    this.#all = all;
+    this.#skipFull = skipFull;
+    this.#mergeAsync = mergeAsync;
+    this.#monocartArgv = monocartArgv;
 
     if (typeof src === 'string') {
-      this.#src = [src]
+      this.#src = [src];
     } else if (Array.isArray(src)) {
-      this.#src = src
+      this.#src = src;
     } else {
-      this.#src = [process.cwd()]
+      this.#src = [process.cwd()];
     }
   }
 
-  async run () {
+  async run() {
     if (this.#monocartArgv) {
-      return this.runMonocart()
+      return this.runMonocart();
     }
     const context = libReport.createContext({
       dir: this.#reportsDirectory,
       watermarks: this.#watermarks,
-      coverageMap: await this.getCoverageMapFromAllCoverageFiles()
-    })
+      coverageMap: await this.getCoverageMapFromAllCoverageFiles(),
+    });
 
     for (const _reporter of this.#reporter) {
-      reports.create(_reporter, {
-        skipEmpty: false,
-        skipFull: this.#skipFull,
-        maxCols: process.stdout.columns || DEFAULT_MAX_COLS,
-        ...this.#reporterOptions[_reporter]
-      }).execute(context)
+      reports
+        .create(_reporter, {
+          skipEmpty: false,
+          skipFull: this.#skipFull,
+          maxCols: process.stdout.columns || DEFAULT_MAX_COLS,
+          ...this.#reporterOptions[_reporter],
+        })
+        .execute(context);
     }
   }
 
-  async importMonocart () {
-    return import('monocart-coverage-reports')
+  async importMonocart() {
+    return import('monocart-coverage-reports');
   }
 
-  async getMonocart () {
-    let MCR
+  async getMonocart() {
+    let MCR;
     try {
-      MCR = await this.importMonocart()
+      MCR = await this.importMonocart();
     } catch (e) {
-      console.error('--experimental-monocart requires the plugin monocart-coverage-reports. Run: "npm i monocart-coverage-reports@2 --save-dev"')
-      process.exit(1)
+      console.error(
+        '--experimental-monocart requires the plugin monocart-coverage-reports. Run: "npm i monocart-coverage-reports@2 --save-dev"',
+      );
+      process.exit(1);
     }
-    return MCR
+    return MCR;
   }
 
   #defaultMonocartEntryFilter = (entry: V8CoverageEntry) => {
-    return this.#exclude.shouldInstrument(fileURLToPath(entry.url))
+    return this.#exclude.shouldInstrument(fileURLToPath(entry.url));
   };
 
   #defaultMonocartSourceFilter = (sourcePath: string) => {
     if (this.#monocartArgv?.excludeAfterRemap) {
       // console.log(sourcePath)
-      return this.#exclude.shouldInstrument(sourcePath)
+      return this.#exclude.shouldInstrument(sourcePath);
     }
-    return true
+    return true;
   };
 
   #computeMonocartEntryFilter() {
-    const argv = this.#monocartArgv
+    const argv = this.#monocartArgv;
     if (!argv) {
       return this.#defaultMonocartEntryFilter;
     }
@@ -191,12 +202,14 @@ export class Report {
   }
 
   #computeMonocartSourceFilter() {
-    const argv = this.#monocartArgv
+    const argv = this.#monocartArgv;
 
     if (!argv) {
       return this.#defaultMonocartSourceFilter;
     }
-    return argv.sourceFilter || argv.filter || this.#defaultMonocartSourceFilter;
+    return (
+      argv.sourceFilter || argv.filter || this.#defaultMonocartSourceFilter
+    );
   }
 
   #getMonocartReports(): ReportDescription[] {
@@ -206,20 +219,23 @@ export class Report {
       return [];
     }
 
-    const reports: unknown[] = Array.isArray(argv.reporter) ? argv.reporter : [argv.reporter]
-    const reporterOptions: Record<PropertyKey, unknown> = argv.reporterOptions || {}
+    const reports: unknown[] = Array.isArray(argv.reporter)
+      ? argv.reporter
+      : [argv.reporter];
+    const reporterOptions: Record<PropertyKey, unknown> =
+      argv.reporterOptions || {};
 
     return reports.map((reportName) => {
       const reportOptions = {
-        ...reporterOptions[reportName]
-      }
+        ...reporterOptions[reportName],
+      };
       if (reportName === 'text') {
-        reportOptions.skipEmpty = false
-        reportOptions.skipFull = argv.skipFull
-        reportOptions.maxCols = process.stdout.columns || DEFAULT_MAX_COLS
+        reportOptions.skipEmpty = false;
+        reportOptions.skipFull = argv.skipFull;
+        reportOptions.maxCols = process.stdout.columns || DEFAULT_MAX_COLS;
       }
-      return [reportName, reportOptions]
-    })
+      return [reportName, reportOptions];
+    });
   }
 
   // --all: add empty coverage for all files
@@ -230,57 +246,63 @@ export class Report {
       return undefined;
     }
 
-    const src = argv.src
-    const workingDirs: string[] = Array.isArray(src) ? src : (typeof src === 'string' ? [src] : [process.cwd()])
+    const src = argv.src;
+    const workingDirs: string[] = Array.isArray(src)
+      ? src
+      : typeof src === 'string'
+        ? [src]
+        : [process.cwd()];
     return {
       dir: workingDirs,
       filter: (filePath: string) => {
-        return this.#exclude.shouldInstrument(filePath)
-      }
-    }
+        return this.#exclude.shouldInstrument(filePath);
+      },
+    };
   }
 
   #onMonocartEnd = (coverageResults: CoverageResults | undefined) => {
     if (!coverageResults) {
-      return
+      return;
     }
 
     // for check coverage
     this.#allCoverageFiles = {
       files: () => {
-        return coverageResults.files.map(it => it.sourcePath)
+        return coverageResults.files.map((it) => it.sourcePath);
       },
       fileCoverageFor: (file: string) => {
-        const fileCoverage = coverageResults.files.find(it => it.sourcePath === file)
+        const fileCoverage = coverageResults.files.find(
+          (it) => it.sourcePath === file,
+        );
 
         if (!fileCoverage) {
-          throw new Error(`No file coverage found for ${file}`)
+          throw new Error(`No file coverage found for ${file}`);
         }
 
         return {
           toSummary: () => {
             initialiseMonocartPercentages(fileCoverage.summary);
             return fileCoverage.summary;
-          }
-        } as unknown as FileCoverage
+          },
+        } as unknown as FileCoverage;
       },
       getCoverageSummary: () => {
         initialiseMonocartPercentages(coverageResults.summary);
         return coverageResults.summary as unknown as CoverageSummary;
-      }
+      },
     } as unknown as CoverageMap;
   };
 
-  async runMonocart () {
-    const MCR = await this.getMonocart()
+  async runMonocart() {
+    const MCR = await this.getMonocart();
     if (!MCR) {
-      return
+      return;
     }
 
-    const argv = this.#monocartArgv
+    const argv = this.#monocartArgv;
 
     if (!argv) {
-      return
+      return;
     }
 
     // adapt coverage options
@@ -306,68 +328,73 @@ export class Report {
       // use default value for istanbul
       defaultSummarizer: 'pkg',
 
-      onEnd: this.#onMonocartEnd
-    }
+      onEnd: this.#onMonocartEnd,
+    };
 
-    const coverageReport = new MCR.CoverageReport(coverageOptions)
-    coverageReport.cleanCache()
+    const coverageReport = new MCR.CoverageReport(coverageOptions);
+    coverageReport.cleanCache();
 
     // read v8 coverage data from tempDirectory
-    await coverageReport.addFromDir(argv.tempDirectory)
+    await coverageReport.addFromDir(argv.tempDirectory);
 
     // generate report
-    await coverageReport.generate()
+    await coverageReport.generate();
   }
 
-  async getCoverageMapFromAllCoverageFiles () {
+  async getCoverageMapFromAllCoverageFiles() {
     // the merge process can be very expensive, and it's often the case that
     // check-coverage is called immediately after a report. We memoize the
     // result from getCoverageMapFromAllCoverageFiles() to address this
     // use-case.
     if (this.#allCoverageFiles) {
-      return this.#allCoverageFiles
+      return this.#allCoverageFiles;
     }
 
-    const map = libCoverage.createCoverageMap()
-    let v8ProcessCov: ProcessCov | null = null
+    const map = libCoverage.createCoverageMap();
+    let v8ProcessCov: ProcessCov | null = null;
 
     if (this.#mergeAsync) {
-      v8ProcessCov = await this._getMergedProcessCovAsync()
+      v8ProcessCov = await this._getMergedProcessCovAsync();
     } else {
-      v8ProcessCov = this._getMergedProcessCov()
+      v8ProcessCov = this._getMergedProcessCov();
     }
-    const resultCountPerPath = new Map()
+    const resultCountPerPath = new Map();
 
     if (v8ProcessCov) {
       for (const v8ScriptCov of v8ProcessCov.result) {
         try {
-          const sources = this._getSourceMap(v8ScriptCov)
-          const path = resolve(this.#resolve, v8ScriptCov.url)
-          const converter = v8toIstanbul(path, this.#wrapperLength, sources, (path) => {
-            if (this.#excludeAfterRemap) {
-              return !this._shouldInstrument(path)
-            }
-            return false;
-          })
-          await converter.load()
+          const sources = this._getSourceMap(v8ScriptCov);
+          const path = resolve(this.#resolve, v8ScriptCov.url);
+          const converter = v8toIstanbul(
+            path,
+            this.#wrapperLength,
+            sources,
+            (path) => {
+              if (this.#excludeAfterRemap) {
+                return !this._shouldInstrument(path);
+              }
+              return false;
+            },
+          );
+          await converter.load();
 
           if (resultCountPerPath.has(path)) {
-            resultCountPerPath.set(path, resultCountPerPath.get(path) + 1)
+            resultCountPerPath.set(path, resultCountPerPath.get(path) + 1);
           } else {
-            resultCountPerPath.set(path, 0)
+            resultCountPerPath.set(path, 0);
           }
 
-          converter.applyCoverage(v8ScriptCov.functions)
-          map.merge(converter.toIstanbul())
+          converter.applyCoverage(v8ScriptCov.functions);
+          map.merge(converter.toIstanbul());
         } catch (err) {
-          const stack = err instanceof Error ? err.stack : String(err)
-          debuglog(`file: ${v8ScriptCov.url} error: ${stack}`)
+          const stack = err instanceof Error ? err.stack : String(err);
+          debuglog(`file: ${v8ScriptCov.url} error: ${stack}`);
         }
       }
     }
 
-    this.#allCoverageFiles = map
-    return this.#allCoverageFiles
+    this.#allCoverageFiles = map;
+    return this.#allCoverageFiles;
   }
 
   /**
@@ -380,30 +407,31 @@ export class Report {
    * @return {Object} sourceMap and fake source file (created from line #s).
    * @private
    */
-  _getSourceMap (v8ScriptCov: ScriptCov) {
+  _getSourceMap(v8ScriptCov: ScriptCov) {
     const sources: {
-      source: string
-      originalSource?: string
-      sourceMap?: { sourcemap: unknown }
+      source: string;
+      originalSource?: string;
+      sourceMap?: { sourcemap: unknown };
     } = {
-      source: ''
+      source: '',
     };
-    const sourceMapAndLineLengths = this.#sourceMapCache[pathToFileURL(v8ScriptCov.url).href]
+    const sourceMapAndLineLengths =
+      this.#sourceMapCache[pathToFileURL(v8ScriptCov.url).href];
     if (sourceMapAndLineLengths) {
       // See: https://github.com/nodejs/node/pull/34305
-      if (!sourceMapAndLineLengths.data) return
+      if (!sourceMapAndLineLengths.data) return;
       sources.sourceMap = {
-        sourcemap: sourceMapAndLineLengths.data
-      }
+        sourcemap: sourceMapAndLineLengths.data,
+      };
       if (sourceMapAndLineLengths.lineLengths) {
-        let source = ''
-        sourceMapAndLineLengths.lineLengths.forEach(length => {
-          source += `${''.padEnd(length, '.')}\n`
-        })
-        sources.source = source
+        let source = '';
+        sourceMapAndLineLengths.lineLengths.forEach((length) => {
+          source += `${''.padEnd(length, '.')}\n`;
+        });
+        sources.source = source;
       }
     }
-    return sources
+    return sources;
   }
 
   /**
@@ -415,26 +443,29 @@ export class Report {
    * @return {ProcessCov} Merged V8 process coverage.
    * @private
    */
-  _getMergedProcessCov (): ProcessCov {
-    const v8ProcessCovs = []
-    const fileIndex = new Set<string>()
+  _getMergedProcessCov(): ProcessCov {
+    const v8ProcessCovs = [];
+    const fileIndex = new Set<string>();
     for (const v8ProcessCov of this._loadReports()) {
       if (this._isCoverageObject(v8ProcessCov)) {
         if (v8ProcessCov['source-map-cache']) {
-          Object.assign(this.#sourceMapCache, this._normalizeSourceMapCache(v8ProcessCov['source-map-cache']))
+          Object.assign(
+            this.#sourceMapCache,
+            this._normalizeSourceMapCache(v8ProcessCov['source-map-cache']),
+          );
         }
-        v8ProcessCovs.push(this._normalizeProcessCov(v8ProcessCov, fileIndex))
+        v8ProcessCovs.push(this._normalizeProcessCov(v8ProcessCov, fileIndex));
       }
     }
 
     if (this.#all) {
-      const emptyReports = this._includeUncoveredFiles(fileIndex)
+      const emptyReports = this._includeUncoveredFiles(fileIndex);
       v8ProcessCovs.unshift({
-        result: emptyReports
-      })
+        result: emptyReports,
+      });
     }
 
-    return mergeProcessCovs(v8ProcessCovs)
+    return mergeProcessCovs(v8ProcessCovs);
   }
 
   /**
@@ -447,44 +478,47 @@ export class Report {
    * @return {ProcessCov} Merged V8 process coverage.
    * @private
    */
-  async _getMergedProcessCovAsync (): Promise<ProcessCov | null> {
-    const fileIndex = new Set<string>()
-    let mergedCov = null
+  async _getMergedProcessCovAsync(): Promise<ProcessCov | null> {
+    const fileIndex = new Set<string>();
+    let mergedCov = null;
     for (const file of readdirSync(this.#tempDirectory)) {
       try {
         const rawFile = await readFile(
           resolve(this.#tempDirectory, file),
-          'utf8'
-        )
-        let report = JSON.parse(rawFile)
+          'utf8',
+        );
+        let report = JSON.parse(rawFile);
 
         if (this._isCoverageObject(report)) {
           if (report['source-map-cache']) {
-            Object.assign(this.#sourceMapCache, this._normalizeSourceMapCache(report['source-map-cache']))
+            Object.assign(
+              this.#sourceMapCache,
+              this._normalizeSourceMapCache(report['source-map-cache']),
+            );
           }
-          report = this._normalizeProcessCov(report, fileIndex)
+          report = this._normalizeProcessCov(report, fileIndex);
           if (mergedCov) {
-            mergedCov = mergeProcessCovs([mergedCov, report])
+            mergedCov = mergeProcessCovs([mergedCov, report]);
           } else {
-            mergedCov = mergeProcessCovs([report])
+            mergedCov = mergeProcessCovs([report]);
           }
         }
       } catch (err) {
-        const stack = err instanceof Error ? err.stack : String(err)
-        debuglog(`${stack}`)
+        const stack = err instanceof Error ? err.stack : String(err);
+        debuglog(`${stack}`);
       }
     }
 
     if (this.#all && mergedCov) {
-      const emptyReports = this._includeUncoveredFiles(fileIndex)
+      const emptyReports = this._includeUncoveredFiles(fileIndex);
       const emptyReport = {
-        result: emptyReports
-      }
+        result: emptyReports,
+      };
 
-      mergedCov = mergeProcessCovs([emptyReport, mergedCov])
+      mergedCov = mergeProcessCovs([emptyReport, mergedCov]);
     }
 
-    return mergedCov
+    return mergedCov;
   }
 
   /**
@@ -494,40 +528,46 @@ export class Report {
    * @param {Set} fileIndex list of files that have coverage
    * @returns {Array} list of empty coverage reports
    */
-  _includeUncoveredFiles (fileIndex: Set<string>): ScriptCov[] {
-    const emptyReports: ScriptCov[] = []
-    const workingDirs = this.#src
-    const { extension } = this.#exclude
+  _includeUncoveredFiles(fileIndex: Set<string>): ScriptCov[] {
+    const emptyReports: ScriptCov[] = [];
+    const workingDirs = this.#src;
+    const { extension } = this.#exclude;
     for (const workingDir of workingDirs) {
       this.#exclude.globSync(workingDir).forEach((f) => {
-        const fullPath = resolve(workingDir, f)
+        const fullPath = resolve(workingDir, f);
         if (!fileIndex.has(fullPath)) {
-          const ext = extname(fullPath)
+          const ext = extname(fullPath);
           if (extension.includes(ext)) {
-            const stat = statSync(fullPath)
-            const sourceMap = getSourceMapFromFile(fullPath)
+            const stat = statSync(fullPath);
+            const sourceMap = getSourceMapFromFile(fullPath);
             if (sourceMap) {
-              this.#sourceMapCache[pathToFileURL(fullPath).href] = { data: sourceMap }
+              this.#sourceMapCache[pathToFileURL(fullPath).href] = {
+                data: sourceMap,
+              };
             }
             emptyReports.push({
               scriptId: 0,
               url: resolve(fullPath),
-              functions: [{
-                functionName: '(empty-report)',
-                ranges: [{
-                  startOffset: 0,
-                  endOffset: stat.size,
-                  count: 0
-                }],
-                isBlockCoverage: true
-              }]
-            })
+              functions: [
+                {
+                  functionName: '(empty-report)',
+                  ranges: [
+                    {
+                      startOffset: 0,
+                      endOffset: stat.size,
+                      count: 0,
+                    },
+                  ],
+                  isBlockCoverage: true,
+                },
+              ],
+            });
           }
         }
-      })
+      });
     }
 
-    return emptyReports
+    return emptyReports;
   }
 
   /**
@@ -536,10 +576,14 @@ export class Report {
    * @return {boolean} does it look like v8ProcessCov?
    * @private
    */
-  _isCoverageObject (maybeV8ProcessCov: unknown): maybeV8ProcessCov is NodeProcessCov {
-    return typeof maybeV8ProcessCov === 'object'
-      && maybeV8ProcessCov !== null
-      && Array.isArray((maybeV8ProcessCov as { result?: unknown }).result)
+  _isCoverageObject(
+    maybeV8ProcessCov: unknown,
+  ): maybeV8ProcessCov is NodeProcessCov {
+    return (
+      typeof maybeV8ProcessCov === 'object' &&
+      maybeV8ProcessCov !== null &&
+      Array.isArray((maybeV8ProcessCov as { result?: unknown }).result)
+    );
   }
 
   /**
@@ -548,20 +592,19 @@ export class Report {
    * @return {ProcessCov[]} Process coverages generated by Node.
    * @private
    */
-  _loadReports (): unknown[] {
-    const reports: unknown[] = []
+  _loadReports(): unknown[] {
+    const reports: unknown[] = [];
     for (const file of readdirSync(this.#tempDirectory)) {
       try {
-        reports.push(JSON.parse(readFileSync(
-          resolve(this.#tempDirectory, file),
-          'utf8'
-        )))
+        reports.push(
+          JSON.parse(readFileSync(resolve(this.#tempDirectory, file), 'utf8')),
+        );
       } catch (err) {
-        const stack = err instanceof Error ? err.stack : String(err)
-        debuglog(`${stack}`)
+        const stack = err instanceof Error ? err.stack : String(err);
+        debuglog(`${stack}`);
       }
     }
-    return reports
+    return reports;
   }
 
   /**
@@ -580,31 +623,37 @@ export class Report {
    * @return {v8ProcessCov} Normalized V8 process coverage.
    * @private
    */
-  _normalizeProcessCov (v8ProcessCov: NodeProcessCov, fileIndex: Set<string>): ProcessCov {
-    const result: ScriptCov[] = []
+  _normalizeProcessCov(
+    v8ProcessCov: NodeProcessCov,
+    fileIndex: Set<string>,
+  ): ProcessCov {
+    const result: ScriptCov[] = [];
     for (const v8ScriptCov of v8ProcessCov.result) {
       // https://github.com/nodejs/node/pull/35498 updates Node.js'
       // builtin module filenames:
       if (/^node:/.test(v8ScriptCov.url)) {
-        v8ScriptCov.url = `${v8ScriptCov.url.replace(/^node:/, '')}.js`
+        v8ScriptCov.url = `${v8ScriptCov.url.replace(/^node:/, '')}.js`;
       }
       if (/^file:\/\//.test(v8ScriptCov.url)) {
         try {
-          v8ScriptCov.url = fileURLToPath(v8ScriptCov.url)
-          fileIndex.add(v8ScriptCov.url)
+          v8ScriptCov.url = fileURLToPath(v8ScriptCov.url);
+          fileIndex.add(v8ScriptCov.url);
         } catch (err) {
-          const stack = err instanceof Error ? err.stack : String(err)
-          debuglog(`${stack}`)
-          continue
+          const stack = err instanceof Error ? err.stack : String(err);
+          debuglog(`${stack}`);
+          continue;
         }
       }
-      if ((!this.#omitRelative || isAbsolute(v8ScriptCov.url))) {
-        if (this.#excludeAfterRemap || this._shouldInstrument(v8ScriptCov.url)) {
-          result.push(v8ScriptCov)
+      if (!this.#omitRelative || isAbsolute(v8ScriptCov.url)) {
+        if (
+          this.#excludeAfterRemap ||
+          this._shouldInstrument(v8ScriptCov.url)
+        ) {
+          result.push(v8ScriptCov);
         }
       }
     }
-    return { result }
+    return { result };
   }
 
   /**
@@ -616,12 +665,14 @@ export class Report {
    * @return {v8SourceMapCache} Normalized V8 source map cache.
    * @private
    */
-  _normalizeSourceMapCache (v8SourceMapCache: NodeSourceMapCache): NodeSourceMapCache {
-    const cache: NodeSourceMapCache = {}
+  _normalizeSourceMapCache(
+    v8SourceMapCache: NodeSourceMapCache,
+  ): NodeSourceMapCache {
+    const cache: NodeSourceMapCache = {};
     for (const [fileURL, entry] of Object.entries(v8SourceMapCache)) {
-      cache[pathToFileURL(fileURLToPath(fileURL)).href] = entry
+      cache[pathToFileURL(fileURLToPath(fileURL)).href] = entry;
     }
-    return cache
+    return cache;
   }
 
   /**
@@ -630,14 +681,14 @@ export class Report {
    * @private
    * @return {boolean}
    */
-  _shouldInstrument (filename: string): boolean {
-    const cacheResult = this.#shouldInstrumentCache.get(filename)
+  _shouldInstrument(filename: string): boolean {
+    const cacheResult = this.#shouldInstrumentCache.get(filename);
     if (cacheResult !== undefined) {
-      return cacheResult
+      return cacheResult;
     }
 
-    const result = this.#exclude.shouldInstrument(filename)
-    this.#shouldInstrumentCache.set(filename, result)
-    return result
+    const result = this.#exclude.shouldInstrument(filename);
+    this.#shouldInstrumentCache.set(filename, result);
+    return result;
   }
 }
