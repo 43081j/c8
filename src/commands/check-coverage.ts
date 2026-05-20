@@ -1,6 +1,7 @@
 import { relative } from 'node:path';
 import { Report } from '../report.js';
-import type { CliOptions } from '../cli.js';
+import { resolveOptions } from '../options.js';
+import type { CliOptions } from '../options.js';
 
 interface Thresholds {
   lines: number;
@@ -16,7 +17,10 @@ interface Summary {
   statements: { pct: number };
 }
 
-export async function runCheckCoverage(opts: CliOptions): Promise<void> {
+export async function checkCoverageAction(
+  parsed: Record<string, unknown>,
+): Promise<void> {
+  const opts = resolveOptions(parsed);
   const report = new Report({
     include: opts.include,
     exclude: opts.exclude,

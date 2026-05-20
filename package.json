@@ -52,7 +52,6 @@
   "dependencies": {
     "@bcoe/v8-coverage": "^1.0.1",
     "empathic": "^2.0.1",
-    "foreground-child": "^3.3.0",
     "istanbul-lib-coverage": "^3.2.0",
     "istanbul-lib-report": "^3.0.1",
     "istanbul-reports": "^3.1.6",

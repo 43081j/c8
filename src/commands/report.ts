@@ -1,11 +1,13 @@
 import type { CoverageReportOptions } from 'monocart-coverage-reports';
 import { Report } from '../report.js';
+import { resolveOptions } from '../options.js';
+import type { CliOptions } from '../options.js';
 import { checkCoverages } from './check-coverage.js';
-import type { CliOptions } from '../cli.js';
 
 export async function outputReport(opts: CliOptions): Promise<void> {
   const useMonocart =
-    opts.experimentalMonocart || process.env.EXPERIMENTAL_MONOCART !== undefined;
+    opts.experimentalMonocart ||
+    process.env.EXPERIMENTAL_MONOCART !== undefined;
 
   const report = new Report({
     include: opts.include,
@@ -32,4 +34,10 @@ export async function outputReport(opts: CliOptions): Promise<void> {
   });
   await report.run();
   if (opts.checkCoverage) await checkCoverages(opts, report);
+}
+
+export async function reportAction(
+  parsed: Record<string, unknown>,
+): Promise<void> {
+  await outputReport(resolveOptions(parsed));
 }
