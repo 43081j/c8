@@ -10,7 +10,7 @@ import reports from 'istanbul-reports';
 import type { ReportOptions as IstanbulReportOptions } from 'istanbul-reports';
 import { mergeProcessCovs, ProcessCov, ScriptCov } from '@bcoe/v8-coverage';
 import { readFile } from 'node:fs/promises';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import { isAbsolute, resolve, extname } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { getSourceMapFromFile } from './source-map-from-file.js';
@@ -152,13 +152,13 @@ export class Report {
       coverageMap: await this.getCoverageMapFromAllCoverageFiles(),
     });
 
-    for (const _reporter of this.#reporter) {
+    for (const reporter of this.#reporter) {
       reports
-        .create(_reporter, {
+        .create(reporter, {
           skipEmpty: false,
           skipFull: this.#skipFull,
           maxCols: process.stdout.columns || DEFAULT_MAX_COLS,
-          ...this.#reporterOptions[_reporter],
+          ...this.#reporterOptions[reporter],
         })
         .execute(context);
     }
@@ -172,7 +172,7 @@ export class Report {
     let MCR;
     try {
       MCR = await this.importMonocart();
-    } catch (e) {
+    } catch {
       console.error(
         '--experimental-monocart requires the plugin monocart-coverage-reports. Run: "npm i monocart-coverage-reports@2 --save-dev"',
       );
@@ -219,7 +219,7 @@ export class Report {
       return [];
     }
 
-    const reports: unknown[] = Array.isArray(argv.reporter)
+    const reporters: unknown[] = Array.isArray(argv.reporter)
       ? argv.reporter
       : [argv.reporter];
     const reporterOptions: Record<
@@ -227,7 +227,7 @@ export class Report {
       Record<PropertyKey, unknown>
     > = argv.reporterOptions || {};
 
-    return reports
+    return reporters
       .filter((reportName) => typeof reportName === 'string')
       .map((reportName) => {
         const reportOptions = {
@@ -355,31 +355,35 @@ export class Report {
     }
 
     const map = libCoverage.createCoverageMap();
-    const v8ProcessCov = await this._getMergedProcessCovAsync();
+    const v8ProcessCov = await this.#getMergedProcessCovAsync();
     const resultCountPerPath = new Map();
 
     if (v8ProcessCov) {
       for (const v8ScriptCov of v8ProcessCov.result) {
         try {
-          const sources = this._getSourceMap(v8ScriptCov);
-          const path = resolve(this.#resolve, v8ScriptCov.url);
+          const sources = this.#getSourceMap(v8ScriptCov);
+          const resolvedPath = resolve(this.#resolve, v8ScriptCov.url);
           const converter = v8toIstanbul(
-            path,
+            resolvedPath,
             this.#wrapperLength,
             sources,
             (path) => {
               if (this.#excludeAfterRemap) {
-                return !this._shouldInstrument(path);
+                return !this.#shouldInstrument(path);
               }
               return false;
             },
           );
+          // oxlint-disable-next-line no-await-in-loop
           await converter.load();
 
-          if (resultCountPerPath.has(path)) {
-            resultCountPerPath.set(path, resultCountPerPath.get(path) + 1);
+          if (resultCountPerPath.has(resolvedPath)) {
+            resultCountPerPath.set(
+              resolvedPath,
+              resultCountPerPath.get(resolvedPath) + 1,
+            );
           } else {
-            resultCountPerPath.set(path, 0);
+            resultCountPerPath.set(resolvedPath, 0);
           }
 
           converter.applyCoverage(v8ScriptCov.functions);
@@ -405,7 +409,7 @@ export class Report {
    * @return {Object} sourceMap and fake source file (created from line #s).
    * @private
    */
-  _getSourceMap(v8ScriptCov: ScriptCov) {
+  #getSourceMap(v8ScriptCov: ScriptCov) {
     const sources: {
       source: string;
       originalSource?: string;
@@ -442,25 +446,26 @@ export class Report {
    * @return {ProcessCov} Merged V8 process coverage.
    * @private
    */
-  async _getMergedProcessCovAsync(): Promise<ProcessCov | null> {
+  async #getMergedProcessCovAsync(): Promise<ProcessCov | null> {
     const fileIndex = new Set<string>();
     let mergedCov = null;
     for (const file of readdirSync(this.#tempDirectory)) {
       try {
+        // oxlint-disable-next-line no-await-in-loop
         const rawFile = await readFile(
           resolve(this.#tempDirectory, file),
           'utf8',
         );
         let report = JSON.parse(rawFile);
 
-        if (this._isCoverageObject(report)) {
+        if (this.#isCoverageObject(report)) {
           if (report['source-map-cache']) {
             Object.assign(
               this.#sourceMapCache,
-              this._normalizeSourceMapCache(report['source-map-cache']),
+              this.#normalizeSourceMapCache(report['source-map-cache']),
             );
           }
-          report = this._normalizeProcessCov(report, fileIndex);
+          report = this.#normalizeProcessCov(report, fileIndex);
           if (mergedCov) {
             mergedCov = mergeProcessCovs([mergedCov, report]);
           } else {
@@ -474,7 +479,7 @@ export class Report {
     }
 
     if (this.#all && mergedCov) {
-      const emptyReports = await this._includeUncoveredFiles(fileIndex);
+      const emptyReports = await this.#includeUncoveredFiles(fileIndex);
       const emptyReport = {
         result: emptyReports,
       };
@@ -492,11 +497,12 @@ export class Report {
    * @param {Set} fileIndex list of files that have coverage
    * @returns {Array} list of empty coverage reports
    */
-  async _includeUncoveredFiles(fileIndex: Set<string>): Promise<ScriptCov[]> {
+  async #includeUncoveredFiles(fileIndex: Set<string>): Promise<ScriptCov[]> {
     const emptyReports: ScriptCov[] = [];
     const workingDirs = this.#src;
     const { extension } = this.#exclude;
     for (const workingDir of workingDirs) {
+      // oxlint-disable-next-line no-await-in-loop
       const excluded = await this.#exclude.glob(workingDir);
       for (const f of excluded) {
         const fullPath = resolve(workingDir, f);
@@ -541,7 +547,7 @@ export class Report {
    * @return {boolean} does it look like v8ProcessCov?
    * @private
    */
-  _isCoverageObject(
+  #isCoverageObject(
     maybeV8ProcessCov: unknown,
   ): maybeV8ProcessCov is NodeProcessCov {
     return (
@@ -549,27 +555,6 @@ export class Report {
       maybeV8ProcessCov !== null &&
       Array.isArray((maybeV8ProcessCov as { result?: unknown }).result)
     );
-  }
-
-  /**
-   * Returns the list of V8 process coverages generated by Node.
-   *
-   * @return {ProcessCov[]} Process coverages generated by Node.
-   * @private
-   */
-  _loadReports(): unknown[] {
-    const reports: unknown[] = [];
-    for (const file of readdirSync(this.#tempDirectory)) {
-      try {
-        reports.push(
-          JSON.parse(readFileSync(resolve(this.#tempDirectory, file), 'utf8')),
-        );
-      } catch (err) {
-        const stack = err instanceof Error ? err.stack : String(err);
-        debuglog(`${stack}`);
-      }
-    }
-    return reports;
   }
 
   /**
@@ -588,7 +573,7 @@ export class Report {
    * @return {v8ProcessCov} Normalized V8 process coverage.
    * @private
    */
-  _normalizeProcessCov(
+  #normalizeProcessCov(
     v8ProcessCov: NodeProcessCov,
     fileIndex: Set<string>,
   ): ProcessCov {
@@ -612,7 +597,7 @@ export class Report {
       if (!this.#omitRelative || isAbsolute(v8ScriptCov.url)) {
         if (
           this.#excludeAfterRemap ||
-          this._shouldInstrument(v8ScriptCov.url)
+          this.#shouldInstrument(v8ScriptCov.url)
         ) {
           result.push(v8ScriptCov);
         }
@@ -630,7 +615,7 @@ export class Report {
    * @return {v8SourceMapCache} Normalized V8 source map cache.
    * @private
    */
-  _normalizeSourceMapCache(
+  #normalizeSourceMapCache(
     v8SourceMapCache: NodeSourceMapCache,
   ): NodeSourceMapCache {
     const cache: NodeSourceMapCache = {};
@@ -646,7 +631,7 @@ export class Report {
    * @private
    * @return {boolean}
    */
-  _shouldInstrument(filename: string): boolean {
+  #shouldInstrument(filename: string): boolean {
     const cacheResult = this.#shouldInstrumentCache.get(filename);
     if (cacheResult !== undefined) {
       return cacheResult;
