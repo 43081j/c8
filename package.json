@@ -61,6 +61,8 @@
     "v8-to-istanbul": "^9.0.0"
   },
   "devDependencies": {
+    "@types/istanbul-lib-report": "^3.0.3",
+    "@types/istanbul-reports": "^3.0.4",
     "@types/node": "^24.12.4",
     "@types/picomatch": "^4.0.3",
     "@typescript/native-preview": "^7.0.0-dev.20260518.1",

@@ -7,6 +7,7 @@ import type {
 } from 'istanbul-lib-coverage';
 import libReport from 'istanbul-lib-report';
 import reports from 'istanbul-reports';
+import type { ReportOptions as IstanbulReportOptions } from 'istanbul-reports';
 import { mergeProcessCovs, ProcessCov, ScriptCov } from '@bcoe/v8-coverage';
 import { readFile } from 'node:fs/promises';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -52,7 +53,7 @@ export interface ReportOptions {
   extension: readonly string[];
   excludeAfterRemap: boolean;
   include: readonly string[];
-  reporter: readonly string[];
+  reporter: readonly Reporter[];
   reporterOptions?: Record<string, Record<string, unknown>>;
   reportsDirectory: string;
   tempDirectory: string;
@@ -69,8 +70,10 @@ export interface ReportOptions {
   monocartArgv?: CoverageReportOptions;
 }
 
+type Reporter = keyof IstanbulReportOptions;
+
 export class Report {
-  #reporter: readonly string[];
+  #reporter: readonly Reporter[];
   #reporterOptions: Record<string, Record<string, unknown>>;
   #reportsDirectory: string;
   #tempDirectory: string;
