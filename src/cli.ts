@@ -61,11 +61,6 @@ function registerSharedOptions(prog: sade.Sade): sade.Sade {
       'allow files from outside the cwd in coverage',
       false,
     )
-    .option(
-      '--merge-async',
-      'merge V8 coverage reports asynchronously and incrementally',
-      false,
-    )
     .option('--experimental-monocart', 'use Monocart coverage reports', false);
 }
 

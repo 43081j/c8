@@ -118,7 +118,6 @@ const KEBAB_ALIASES: Record<string, keyof CliOptions> = {
   'wrapper-length': 'wrapperLength',
   'omit-relative': 'omitRelative',
   'allow-external': 'allowExternal',
-  'merge-async': 'mergeAsync',
   'experimental-monocart': 'experimentalMonocart',
 };
 
