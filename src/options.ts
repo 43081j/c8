@@ -40,7 +40,6 @@ const defaultOptions: CliOptions = {
   wrapperLength: 0,
   omitRelative: true,
   allowExternal: false,
-  mergeAsync: false,
   experimentalMonocart: false,
 };
 
@@ -95,7 +94,6 @@ const CLI_FIELDS = [
   'wrapperLength',
   'omitRelative',
   'allowExternal',
-  'mergeAsync',
   'experimentalMonocart',
 ] as const satisfies readonly (keyof CliOptions)[];
 

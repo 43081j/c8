@@ -27,7 +27,6 @@ export async function outputReport(opts: CliOptions): Promise<void> {
     src: opts.src,
     skipFull: opts.skipFull,
     excludeNodeModules: opts.excludeNodeModules,
-    mergeAsync: opts.mergeAsync,
     monocartArgv: useMonocart
       ? (opts as unknown as CoverageReportOptions)
       : undefined,

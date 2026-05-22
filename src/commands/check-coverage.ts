@@ -39,7 +39,6 @@ export async function checkCoverageAction(
     src: opts.src,
     skipFull: opts.skipFull,
     excludeNodeModules: opts.excludeNodeModules,
-    mergeAsync: opts.mergeAsync,
   });
   await checkCoverages(opts, report);
 }
