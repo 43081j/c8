@@ -1,4 +1,4 @@
-import esm from './export.mjs'
-import cjs from './export.cjs'
+import esm from './export.mjs';
+import cjs from './export.cjs';
 
-console.log(esm(), cjs())
+console.log(esm(), cjs());

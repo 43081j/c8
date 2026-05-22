@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-'use strict'
+'use strict';
 
 if (true) {
-  console.info('hello world')
+  console.info('hello world');
 } else {
-  console.info('goodnight moon')
+  console.info('goodnight moon');
 }

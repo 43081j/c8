@@ -1,7 +1,7 @@
-export function foo () {
-  return 'foo'
+export function foo() {
+  return 'foo';
 }
 
-export default function bar () {
-  return 'bar'
+export default function bar() {
+  return 'bar';
 }

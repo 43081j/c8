@@ -1,27 +1,27 @@
 class Foo {
-  constructor (x=33) {
-    this.x = x ? x : 99
+  constructor(x = 33) {
+    this.x = x ? x : 99;
     if (this.x) {
-      console.info('covered')
+      console.info('covered');
     } else {
-      console.info('uncovered')
+      console.info('uncovered');
     }
-    this.methodC()
+    this.methodC();
   }
-  methodA () {
-    console.info('covered')
+  methodA() {
+    console.info('covered');
   }
-  methodB () {
-    console.info('uncovered')
+  methodB() {
+    console.info('uncovered');
   }
-  methodC () {
-    console.info('covered')
+  methodC() {
+    console.info('covered');
   }
-  methodD () {
-    console.info('uncovered')
+  methodD() {
+    console.info('uncovered');
   }
 }
 
-const a = new Foo(0)
-const b = new Foo(33)
-a.methodA()
+const a = new Foo(0);
+const b = new Foo(33);
+a.methodA();

@@ -1,1 +1,1 @@
-require("../multidir1/file1")
+require('../multidir1/file1');

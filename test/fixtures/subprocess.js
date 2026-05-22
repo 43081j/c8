@@ -1,15 +1,15 @@
-function first () {
-  console.info('first')
+function first() {
+  console.info('first');
 }
 
-function second () {
-  console.info('second')
+function second() {
+  console.info('second');
 }
 
 if (process.argv[2] === '1') {
-  first()
+  first();
 }
 
 if (process.argv[2] === '2') {
-  second()
+  second();
 }

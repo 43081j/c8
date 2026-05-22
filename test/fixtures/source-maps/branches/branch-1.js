@@ -1,12 +1,12 @@
-const branch = require('./branch-2')
+const branch = require('./branch-2');
 
 if (false) {
-  console.info('unreachable')
+  console.info('unreachable');
 } else if (true) {
-  console.info('reachable')
+  console.info('reachable');
 } else {
-  console.info('unreachable')
+  console.info('unreachable');
 }
 
-branch(true)
-branch(false)
+branch(true);
+branch(false);

@@ -1,7 +1,7 @@
 'use strict';
 
 var class2 = class Foo {
-  constructor (x=33) {
+  constructor(x = 33) {
     this.x = x ? x : 99;
     if (this.x) {
       console.info('covered');
@@ -10,16 +10,16 @@ var class2 = class Foo {
     }
     this.methodC();
   }
-  methodA () {
+  methodA() {
     console.info('covered');
   }
-  methodB () {
+  methodB() {
     console.info('uncovered');
   }
-  methodC () {
+  methodC() {
     console.info('covered');
   }
-  methodD () {
+  methodD() {
     console.info('uncovered');
   }
 };

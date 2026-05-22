@@ -1,9 +1,9 @@
-module.exports = function branch (a) {
+module.exports = function branch(a) {
   if (a) {
-    console.info('a = true')
+    console.info('a = true');
   } else if (undefined) {
-    console.info('unreachable')
+    console.info('unreachable');
   } else {
-    console.info('a = false')
+    console.info('a = false');
   }
-}
+};

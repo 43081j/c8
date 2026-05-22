@@ -1,5 +1,5 @@
-module.exports = function Unloaded(){
-  return 'Never loaded :('
-}
+module.exports = function Unloaded() {
+  return 'Never loaded :(';
+};
 
-console.log("This file shouldn't have been evaluated")
+console.log("This file shouldn't have been evaluated");

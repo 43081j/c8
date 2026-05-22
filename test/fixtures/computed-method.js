@@ -5,8 +5,8 @@ class Test {
 
   run(i) {
     this.map[i] = {};
-    this.map[i].f = () => console.log("FUNC RUN");
-    console.log("TEST RUN");
+    this.map[i].f = () => console.log('FUNC RUN');
+    console.log('TEST RUN');
   }
 }
 

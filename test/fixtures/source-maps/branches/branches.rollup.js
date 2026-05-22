@@ -1,6 +1,6 @@
 'use strict';
 
-var branch2 = function branch (a) {
+var branch2 = function branch(a) {
   if (a) {
     console.info('a = true');
   } else {

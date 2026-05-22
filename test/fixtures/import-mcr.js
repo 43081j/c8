@@ -1,12 +1,12 @@
 const importMCR = async () => {
-  const Report = require('../../lib/report')
+  const Report = require('../../lib/report');
   const report = Report({
-    monocartArgv: {}
-  })
+    monocartArgv: {},
+  });
   report.importMonocart = () => {
-    throw new Error('not found module')
-  }
-  await report.run()
-}
+    throw new Error('not found module');
+  };
+  await report.run();
+};
 
 importMCR();

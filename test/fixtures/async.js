@@ -1,12 +1,10 @@
-function cool () {
+function cool() {}
 
+function awesome() {
+  console.log('hey');
 }
-
-function awesome () {
-  console.log('hey')
-}
-awesome()
+awesome();
 
 setTimeout(() => {
-  cool()
-}, 500)
+  cool();
+}, 500);

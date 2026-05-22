@@ -1,4 +1,4 @@
-const Report = require('../../../lib/report')
+const Report = require('../../../lib/report');
 const report = new Report({
   include: ['**/*.js'],
   exclude: [],
@@ -7,6 +7,6 @@ const report = new Report({
   omitRelative: true,
   all: true,
   src: '../multidir1/',
-  allowExternal: true
-})
-report.run()
+  allowExternal: true,
+});
+report.run();
