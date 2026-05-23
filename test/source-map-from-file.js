@@ -1,9 +1,9 @@
-/* global describe, it */
-const getSourceMapFromFile = require('../lib/source-map-from-file');
-const assert = require('assert');
-const { readFileSync } = require('fs');
-describe('source-map-from-file', () => {
-  it('should parse source maps from compiled targets', () => {
+import getSourceMapFromFile from '../src/source-map-from-file.js';
+import { readFileSync } from 'node:fs';
+import { suite, test } from 'node:test';
+
+suite('source-map-from-file', () => {
+  test('should parse source maps from compiled targets', (t) => {
     const sourceMap = getSourceMapFromFile(
       './test/fixtures/all/ts-compiled/main.js',
     );
@@ -13,18 +13,18 @@ describe('source-map-from-file', () => {
         'utf8',
       ),
     );
-    assert.deepStrictEqual(sourceMap, expected);
+    t.assert.deepStrictEqual(sourceMap, expected);
   });
-  it('should handle extra whitespace characters', () => {
+  it('should handle extra whitespace characters', (t) => {
     const sourceMap = getSourceMapFromFile(
       './test/fixtures/source-maps/padded.js',
     );
-    assert.deepStrictEqual(sourceMap, { version: 3 });
+    t.assert.deepStrictEqual(sourceMap, { version: 3 });
   });
-  it('should support base64 encoded inline source maps', () => {
+  it('should support base64 encoded inline source maps', (t) => {
     const sourceMap = getSourceMapFromFile(
       './test/fixtures/source-maps/inline.js',
     );
-    assert.strictEqual(sourceMap.version, 3);
+    t.assert.strictEqual(sourceMap.version, 3);
   });
 });

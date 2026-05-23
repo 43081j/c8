@@ -24,9 +24,10 @@
 // https://github.com/nodejs/node/blob/master/lib/internal/source_map/source_map_cache.js
 // we should to upstream and downstream fixes.
 
-const { readFileSync } = require('fs');
-const { fileURLToPath, pathToFileURL } = require('url');
-const util = require('util');
+import { readFileSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import util from 'node:util';
+
 const debuglog = util.debuglog('c8');
 
 const sourceMapLineRE =
@@ -35,7 +36,7 @@ const sourceMapLineRE =
 /**
  * Extract the sourcemap url from a source file
  * reference: https://sourcemaps.info/spec.html
- * @param {String} file - compilation target file
+ * @param {String} filename - compilation target file
  * @returns {String} full path to source map file
  * @private
  */
@@ -44,9 +45,12 @@ export function getSourceMapFromFile(
 ): Record<string, unknown> | null {
   const fileBody = readFileSync(filename).toString();
   const results = fileBody.match(sourceMapLineRE);
-  if (results !== null) {
+  if (results !== null && results.groups?.sourceMappingURL !== undefined) {
     const sourceMappingURL = results.groups.sourceMappingURL;
-    const sourceMap = dataFromUrl(pathToFileURL(filename), sourceMappingURL);
+    const sourceMap = dataFromUrl(
+      pathToFileURL(filename).href,
+      sourceMappingURL,
+    );
     return sourceMap;
   } else {
     return null;
@@ -66,7 +70,7 @@ function dataFromUrl(
         return null;
     }
   } catch (err) {
-    debuglog(err);
+    debuglog(String(err));
     // If no scheme is present, we assume we are dealing with a file path.
     const mapURL = new URL(sourceMappingURL, sourceURL).href;
     return sourceMapFromFile(mapURL);
@@ -78,7 +82,7 @@ function sourceMapFromFile(mapURL: string): Record<string, unknown> | null {
     const content = readFileSync(fileURLToPath(mapURL), 'utf8');
     return JSON.parse(content);
   } catch (err) {
-    debuglog(err);
+    debuglog(String(err));
     return null;
   }
 }
@@ -98,7 +102,7 @@ function sourceMapFromDataUrl(url: string): Record<string, unknown> | null {
     try {
       return JSON.parse(decodedData);
     } catch (err) {
-      debuglog(err);
+      debuglog(String(err));
       return null;
     }
   } else {
