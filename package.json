@@ -35,8 +35,8 @@
     "lint:format": "oxfmt --check src test",
     "lint": "npm run lint:js && npm run lint:format",
     "format": "oxfmt --write src test",
-    "test": "node ./bin/c8.js node --test ./test/*.js",
-    "test:coverage": "node ./bin/c8.js --check-coverage node --test ./test/*.js"
+    "test": "node ./bin/c8.js -- node --test ./test/*.js",
+    "test:coverage": "node ./bin/c8.js --check-coverage -- node --test ./test/*.js"
   },
   "keywords": [
     "coverage",

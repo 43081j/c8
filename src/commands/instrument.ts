@@ -34,8 +34,8 @@ async function spawnInForeground(
 
 export async function instrumentAction(
   parsed: Record<string, unknown>,
+  childArgs: string[],
 ): Promise<void> {
-  const childArgs = (parsed['--'] as string[] | undefined) ?? [];
   const [program, ...programArgs] = childArgs;
   if (program === undefined) {
     console.error(

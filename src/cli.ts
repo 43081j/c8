@@ -69,12 +69,20 @@ async function main(): Promise<void> {
     'Output coverage reports using Node.js built-in V8 coverage',
   );
 
+  const separatorIndex = process.argv.indexOf('--');
+  const childArgs =
+    separatorIndex === -1 ? [] : process.argv.slice(separatorIndex + 1);
+  const sadeArgv =
+    separatorIndex === -1
+      ? process.argv
+      : process.argv.slice(0, separatorIndex);
+
   registerSharedOptions(
     prog
       .command('instrument', 'instrument and run a script', { default: true })
       .example('-- node foo.js')
       .example('--reporter lcov -- node foo.js')
-      .action(instrumentAction),
+      .action((parsed) => instrumentAction(parsed, childArgs)),
   );
 
   registerSharedOptions(
@@ -92,11 +100,7 @@ async function main(): Promise<void> {
       .action(checkCoverageAction),
   );
 
-  // sade's TS for parse options doesn't include mri's `--`, but it forwards it.
-  const { handler, args } = prog.parse(process.argv, {
-    lazy: true,
-    '--': true,
-  } as { lazy: true });
+  const { handler, args } = prog.parse(sadeArgv, { lazy: true });
   await handler(...args);
 }
 
