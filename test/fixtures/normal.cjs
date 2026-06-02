@@ -1,4 +1,4 @@
-require('./async');
+require('./async.cjs');
 
 console.info('i am a line of code');
 

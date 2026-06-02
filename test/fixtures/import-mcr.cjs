@@ -1,6 +1,6 @@
 const importMCR = async () => {
-  const Report = require('../../lib/report');
-  const report = Report({
+  const { Report } = require('../../lib/report');
+  const report = new Report({
     monocartArgv: {},
   });
   report.importMonocart = () => {

@@ -17,7 +17,7 @@ describe('c8', () => {
       '--temp-directory=tmp/normal',
       '--clean=false',
       nodePath,
-      fixture('normal.js'),
+      fixture('normal.cjs'),
     ]);
     t.assert.snapshot(output.toString('utf8'));
   });
@@ -30,7 +30,7 @@ describe('c8', () => {
         '--exclude="test/*.js"',
         '--clean=true',
         nodePath,
-        fixture('normal.js'),
+        fixture('normal.cjs'),
       ],
       {
         env: {
@@ -50,7 +50,7 @@ describe('c8', () => {
       '--temp-directory=tmp/multiple-spawn',
       '--clean=false',
       nodePath,
-      fixture('multiple-spawn.js'),
+      fixture('multiple-spawn.cjs'),
     ]);
     t.assert.snapshot(output.toString('utf8'));
   });
@@ -65,7 +65,7 @@ describe('c8', () => {
         '--omit-relative=false',
         '--clean=false',
         nodePath,
-        fixture('multiple-spawn.js'),
+        fixture('multiple-spawn.cjs'),
       ],
       {
         env: { NODE_DEBUG: 'c8' },
@@ -100,10 +100,10 @@ describe('c8', () => {
         '--allowExternal',
         '--reporter=text',
         nodePath,
-        fixture('report/allowExternal.js'),
+        fixture('report/allowExternal.cjs'),
       ],
       {
-        cwd: dirname(fixture('report/allowExternal.js')),
+        cwd: dirname(fixture('report/allowExternal.cjs')),
       },
     );
     t.assert.equal(status, 0);
@@ -121,8 +121,8 @@ describe('c8', () => {
         '--allowExternal',
         '--reporter=text',
         '--all',
-        `--src=${dirname(fixture('multidir1/file1.js'))}`,
-        `--src=${dirname(fixture('multidir2/file2.js'))}`,
+        `--src=${dirname(fixture('multidir1/file1.cjs'))}`,
+        `--src=${dirname(fixture('multidir2/file2.cjs'))}`,
         `--src=${dirname(fixture('report/srcOverride.js'))}`,
         nodePath,
         fixture('report/srcOverride.js'),
@@ -143,7 +143,7 @@ describe('c8', () => {
         '--temp-directory=tmp/check-coverage',
         '--clean=false',
         nodePath,
-        fixture('normal.js'),
+        fixture('normal.cjs'),
       ]);
     });
 
@@ -195,7 +195,7 @@ describe('c8', () => {
         '--lines=101',
         '--check-coverage',
         nodePath,
-        fixture('normal.js'),
+        fixture('normal.cjs'),
       ]);
       t.assert.equal(status, 1);
       t.assert.snapshot(output.toString('utf8'));
@@ -208,7 +208,7 @@ describe('c8', () => {
         '--temp-directory=tmp/check-coverage',
         '--100',
         nodePath,
-        fixture('normal.js'),
+        fixture('normal.cjs'),
       ]);
 
       t.assert.equal(status, 1);
@@ -236,7 +236,7 @@ describe('c8', () => {
         '--temp-directory=./tmp/report',
         '--clean=false',
         nodePath,
-        fixture('normal.js'),
+        fixture('normal.cjs'),
       ]);
     });
 
@@ -472,10 +472,10 @@ describe('c8', () => {
         '--temp-directory=tmp/vanilla-all',
         '--clean=false',
         '--all=true',
-        '--include=test/fixtures/all/vanilla/**/*.js',
+        '--include=test/fixtures/all/vanilla/**/*.cjs',
         '--exclude=**/*.ts',
         nodePath,
-        fixture('all/vanilla/main.js'),
+        fixture('all/vanilla/main.cjs'),
       ]);
       t.assert.snapshot(output.toString('utf8'));
     });
@@ -486,10 +486,10 @@ describe('c8', () => {
         '--temp-directory=tmp/all-ts',
         '--clean=false',
         '--all=true',
-        '--include=test/fixtures/all/ts-compiled/**/*.js',
+        '--include=test/fixtures/all/ts-compiled/**/*.cjs',
         '--exclude="test/*.js"',
         nodePath,
-        fixture('all/ts-compiled/main.js'),
+        fixture('all/ts-compiled/main.cjs'),
       ]);
       t.assert.snapshot(output.toString('utf8'));
     });
@@ -516,10 +516,10 @@ describe('c8', () => {
         '--check-coverage',
         '--lines=100',
         '--all=true',
-        '--include=test/fixtures/all/vanilla/**/*.js',
+        '--include=test/fixtures/all/vanilla/**/*.cjs',
         '--exclude=**/*.ts',
         nodePath,
-        fixture('all/vanilla/main.js'),
+        fixture('all/vanilla/main.cjs'),
       ]);
       t.assert.snapshot(output.toString('utf8'));
     });
@@ -532,10 +532,10 @@ describe('c8', () => {
         '--check-coverage',
         '--lines=90',
         '--all=true',
-        '--include=test/fixtures/all/vanilla/**/*.js',
+        '--include=test/fixtures/all/vanilla/**/*.cjs',
         '--exclude=**/*.ts',
         nodePath,
-        fixture('all/vanilla/main.js'),
+        fixture('all/vanilla/main.cjs'),
       ]);
 
       const { output } = spawnSync(nodePath, [
@@ -545,7 +545,7 @@ describe('c8', () => {
         '--temp-directory=tmp/all-check-coverage-as-command',
         '--clean=false',
         '--all=true',
-        '--include=test/fixtures/all/vanilla/**/*.js',
+        '--include=test/fixtures/all/vanilla/**/*.cjs',
         '--exclude=**/*.ts',
       ]);
       t.assert.snapshot(output.toString('utf8'));
@@ -575,9 +575,9 @@ describe('c8', () => {
     it('supports reporting on directories outside cwd', (t) => {
       const { output } = spawnSync(
         nodePath,
-        [fixture('report/report-multi-dir-external.js')],
+        [fixture('report/report-multi-dir-external.cjs')],
         {
-          cwd: dirname(fixture('report/report-multi-dir-external.js')),
+          cwd: dirname(fixture('report/report-multi-dir-external.cjs')),
         },
       );
       t.assert.snapshot(output.toString('utf8'));
@@ -586,9 +586,9 @@ describe('c8', () => {
     it('supports reporting on single directories outside cwd', (t) => {
       const { output } = spawnSync(
         nodePath,
-        [fixture('report/report-single-dir-external.js')],
+        [fixture('report/report-single-dir-external.cjs')],
         {
-          cwd: dirname(fixture('report/report-single-dir-external.js')),
+          cwd: dirname(fixture('report/report-single-dir-external.cjs')),
         },
       );
       t.assert.snapshot(output.toString('utf8'));
@@ -657,7 +657,7 @@ describe('c8', () => {
   describe('monocart report', () => {
     it('check import monocart', async (t) => {
       const { output, status } = spawnSync(nodePath, [
-        './test/fixtures/import-mcr.js',
+        './test/fixtures/import-mcr.cjs',
       ]);
       t.assert.equal(status, 1);
       t.assert.snapshot(output.toString('utf8'));
@@ -674,7 +674,7 @@ describe('c8', () => {
         '--reporter=console-details',
         '--clean=false',
         nodePath,
-        fixture('normal.js'),
+        fixture('normal.cjs'),
       ]);
       t.assert.snapshot(output.toString('utf8'));
     });
@@ -688,11 +688,11 @@ describe('c8', () => {
         '--reporter=v8',
         '--reporter=console-details',
         '--all',
-        '--include=test/fixtures/all/vanilla/**/*.js',
+        '--include=test/fixtures/all/vanilla/**/*.cjs',
         '--exclude=**/*.ts',
         '--clean=false',
         nodePath,
-        fixture('all/vanilla/main.js'),
+        fixture('all/vanilla/main.cjs'),
       ]);
       t.assert.snapshot(output.toString('utf8'));
     });
@@ -712,7 +712,7 @@ describe('c8', () => {
         '--lines=80',
         '--clean=false',
         nodePath,
-        fixture('normal.js'),
+        fixture('normal.cjs'),
       ]);
       t.assert.equal(status, 1);
       t.assert.snapshot(output.toString('utf8'));
@@ -734,7 +734,7 @@ describe('c8', () => {
         '--per-file',
         '--clean=false',
         nodePath,
-        fixture('normal.js'),
+        fixture('normal.cjs'),
       ]);
       t.assert.equal(status, 1);
       t.assert.snapshot(output.toString('utf8'));
@@ -751,11 +751,11 @@ describe('c8', () => {
         '--all',
         '--100',
         '--per-file',
-        '--include=test/fixtures/all/vanilla/**/*.js',
+        '--include=test/fixtures/all/vanilla/**/*.cjs',
         '--exclude=**/*.ts',
         '--clean=false',
         nodePath,
-        fixture('all/vanilla/main.js'),
+        fixture('all/vanilla/main.cjs'),
       ]);
       t.assert.equal(status, 1);
       t.assert.snapshot(output.toString('utf8'));
